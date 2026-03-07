@@ -1,5 +1,7 @@
 # ArXiv ML Research Assistant
 
+[![CI](https://github.com/anime-sh16/research-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/anime-sh16/research-rag/actions/workflows/ci.yml)
+
 An end-to-end RAG system for querying ArXiv ML research papers with natural language.
 
 > **Status:** Phase 0 — Project scaffolding and CI setup complete.
