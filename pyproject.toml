@@ -8,9 +8,9 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    "pre-commit=4.5.1",
+    "pre-commit==4.5.1",
     "pytest>=9.0.2",
-    "ruff=0.15.5",
+    "ruff==0.15.5",
 ]
 
 [tool.ruff]
