@@ -19,10 +19,15 @@ class Settings(BaseSettings):
 
 class DataSettings:
     temp_dir: Path = Path("data/tmp")
+    
+class DBSettings:
+    collection_name: str = "arxiv_paper_1"
+    embedding_dimension: int = 768
 
 
 settings = Settings()
 data_settings = DataSettings()
+db_settings = DBSettings()
 
 os.environ["LANGSMITH_TRACING"] = settings.langsmith_tracing
 os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key

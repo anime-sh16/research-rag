@@ -38,7 +38,7 @@ class BasicChunker:
         for i, text in enumerate(result_chunks):
             chunks.append(
                 ChunkMetaData(
-                    chunk_id=f"{arxiv_result.entry_id}_{arxiv_result.title}_{i}",
+                    chunk_id=f"{arxiv_result.entry_id}_{arxiv_result.title.replace(' ', '_')}_{i}",
                     chunk_index=i,
                     paper_id=arxiv_result.entry_id,
                     title=arxiv_result.title,
