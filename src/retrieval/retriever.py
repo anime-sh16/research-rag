@@ -91,6 +91,7 @@ class Retriever:
                 "title": result.payload.get("title"),
                 "paper_id": result.payload.get("paper_id"),
                 "chunk_index": result.payload.get("chunk_index"),
+                "authors": result.payload.get("authors"),
             }
             for result in results
         ]

@@ -12,9 +12,9 @@ Question: {question}"""
 
 
 class RAGChain:
-    def __init__(self):
+    def __init__(self, model: str = "gemini-2.5-flash-lite"):
         self.client = genai.Client(api_key=settings.google_api_key)
-        self.model = "gemini-2.5-flash-lite"
+        self.model = model
 
     def _format_context(self, chunks: list[dict]) -> str:
         parts = []
@@ -33,7 +33,7 @@ class RAGChain:
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.1,  # low = stay grounded, avoid hallucination
+                temperature=0.1,
             ),
         )
 

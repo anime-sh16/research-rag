@@ -13,11 +13,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "arxiv>=2.4.1",
+    "fastapi>=0.135.1",
     "google-genai>=1.66.0",
     "langchain-text-splitters>=1.1.1",
     "langsmith>=0.7.14",
     "pydantic-settings>=2.13.1",
     "qdrant-client>=1.17.0",
+    "uvicorn>=0.41.0",
 ]
 
 [dependency-groups]
