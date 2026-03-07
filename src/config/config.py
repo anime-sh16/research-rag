@@ -19,7 +19,8 @@ class Settings(BaseSettings):
 
 class DataSettings:
     temp_dir: Path = Path("data/tmp")
-    
+
+
 class DBSettings:
     collection_name: str = "arxiv_paper_1"
     embedding_dimension: int = 768

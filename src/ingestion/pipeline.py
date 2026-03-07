@@ -26,16 +26,16 @@ class SimpleIngestionPipeline:
             self.query, max_results=self.max_results
         )
         all_chunks = self.chunker.chunk_all_results(arxiv_results)
-        
+
         # save chunks to json tmp file
         temp_output_file = data_settings.temp_dir / f"{self.query}.jsonl"
         self.save_chunks_to_json(all_chunks, temp_output_file)
-        
+
         # save chunks to vector store
         vector_store = VectorStore()
         vector_store.ensure_collection(collection_name=db_settings.collection_name)
         vector_store.upsert_chunks(all_chunks)
-        
+
         return all_chunks
 
     def save_chunks_to_json(self, chunks: list, output_file: str):
