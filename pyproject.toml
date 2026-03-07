@@ -14,6 +14,7 @@ requires-python = ">=3.12"
 dependencies = [
     "arxiv>=2.4.1",
     "google-genai>=1.66.0",
+    "langchain-text-splitters>=1.1.1",
     "langsmith>=0.7.14",
     "pydantic-settings>=2.13.1",
     "qdrant-client>=1.17.0",
@@ -21,6 +22,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "ipykernel>=7.2.0",
     "pre-commit==4.5.1",
     "pytest>=9.0.2",
     "ruff==0.15.5",
@@ -36,7 +38,7 @@ target-version = "py312"
 # F: Pyflakes (logical errors like unused imports)
 # I: isort (import sorting)
 select = ["E", "F", "I"]
-ignore = []
+ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

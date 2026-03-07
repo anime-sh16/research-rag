@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
@@ -16,7 +17,12 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env"}
 
 
+class DataSettings:
+    temp_dir: Path = Path("data/tmp")
+
+
 settings = Settings()
+data_settings = DataSettings()
 
 os.environ["LANGSMITH_TRACING"] = settings.langsmith_tracing
 os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key

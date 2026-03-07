@@ -5,11 +5,13 @@ build/
 dist/
 wheels/
 *.egg-info
+.vscode
 
 # Virtual environments
 .venv
 
 notebooks/
+data/tmp/
 CLAUDE.md
 PLAN.md
 OBJECTIVE.md
