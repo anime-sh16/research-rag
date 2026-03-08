@@ -11,6 +11,7 @@ class ChunkMetaData(BaseModel):
     chunk_index: int
     paper_id: str
     title: str
+    comment: str | None
     authors: list[str] | None
     primary_category: str
     categories: list[str] | None
@@ -43,6 +44,7 @@ class BasicChunker:
                     paper_id=arxiv_result.entry_id,
                     title=arxiv_result.title,
                     authors=arxiv_result.authors if arxiv_result.authors else [],
+                    comment=arxiv_result.comment if arxiv_result.comment else None,
                     primary_category=arxiv_result.primary_category,
                     categories=arxiv_result.categories
                     if arxiv_result.categories

@@ -57,7 +57,7 @@ class ArxivClient:
             published=arxiv_result.published,
             summary=arxiv_result.summary,
             authors=authors,
-            comment=arxiv_result.comment,
+            comment=arxiv_result.comment if arxiv_result.comment else None,
             primary_category=arxiv_result.primary_category,
             categories=arxiv_result.categories,
         )
