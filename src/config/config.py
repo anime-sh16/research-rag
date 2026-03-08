@@ -24,9 +24,14 @@ class DBConfig(BaseModel):
 
 class IngestionConfig(BaseModel):
     topics: list[str] = [
-        "transformer architecture",
-        "retrieval augmented generation",
-        "large language model fine-tuning",
+        "language models NLP",
+        "retrieval augmented generation knowledge",
+        "generative models diffusion GAN",
+        "fine-tuning transfer learning adaptation",
+        "reinforcement learning human feedback alignment",
+        "vision transformers multimodal learning",
+        "agents planning tool use autonomous",
+        "efficient inference compression optimization",
     ]
     fetch_sort_by: arxiv.SortCriterion = arxiv.SortCriterion.Relevance
     fetch_per_topic: int = 250

@@ -26,6 +26,7 @@ class ArxivResult(BaseModel):
     comment: str | None
     primary_category: str
     categories: list[str] | None
+    pdf_url: str | None
     full_text: str | None
 
 
@@ -42,21 +43,38 @@ class ArxivClient:
         query: str,
         max_results: int = 10,
         sort_by: arxiv.SortCriterion = SORT_BY,
+        download_pdf: bool = True,
     ) -> list[ArxivResult]:
         logger.info("Fetching up to %d papers for query: '%s'", max_results, query)
         search = arxiv.Search(query=query, max_results=max_results, sort_by=sort_by)
         results = []
         for r in self.client.results(search):
             try:
-                results.append(self._parse_arxiv_result(r, query))
+                results.append(
+                    self._parse_arxiv_result(r, query, download_pdf=download_pdf)
+                )
             except Exception:
                 logger.exception("Skipping paper %s due to parse error.", r.entry_id)
 
         logger.info("Fetched %d papers.", len(results))
         return results
 
+    def populate_full_text(self, result: ArxivResult) -> None:
+        """Download and extract PDF text for a result that was fetched metadata-only."""
+        if result.full_text is not None:
+            return
+        if not result.pdf_url or not result.topic:
+            logger.warning(
+                "Cannot populate full_text for %s: missing pdf_url or topic.",
+                result.entry_id,
+            )
+            return
+        result.full_text = self._extract_pdf_text(
+            result.pdf_url, result.entry_id, result.topic
+        )
+
     def _parse_arxiv_result(
-        self, arxiv_result: arxiv.Result, topic: str
+        self, arxiv_result: arxiv.Result, topic: str, download_pdf: bool = True
     ) -> ArxivResult:
         entry_id = arxiv_result.entry_id.split("/")[-1].split("v")[0]
         authors = (
@@ -64,7 +82,12 @@ class ArxivClient:
             if arxiv_result.authors
             else []
         )
-        full_text = self._extract_pdf_text(arxiv_result, topic)
+        pdf_url = getattr(arxiv_result, "pdf_url", None)
+        full_text = (
+            self._extract_pdf_text(pdf_url, entry_id, topic)
+            if download_pdf and pdf_url
+            else None
+        )
 
         return ArxivResult(
             entry_id=entry_id,
@@ -76,16 +99,13 @@ class ArxivClient:
             comment=arxiv_result.comment or None,
             primary_category=arxiv_result.primary_category,
             categories=arxiv_result.categories,
+            pdf_url=pdf_url,
             full_text=full_text,
         )
 
-    def _download_pdf_locally(self, arxiv_result: arxiv.Result, output_dir: str) -> str:
-        pdf_url = getattr(arxiv_result, "pdf_url", None)
-        if not pdf_url:
-            raise ValueError("arxiv result does not contain a pdf_url")
-
-        entry_id = arxiv_result.entry_id.split("/")[-1].split("v")[0]
-
+    def _download_pdf_locally(
+        self, pdf_url: str, entry_id: str, output_dir: str
+    ) -> str:
         # Check if already exists
         file_path = os.path.join(output_dir, f"{entry_id}.pdf")
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
@@ -94,11 +114,7 @@ class ArxivClient:
         os.makedirs(output_dir, exist_ok=True)
 
         logger.info("Downloading PDF from %s to %s", pdf_url, file_path)
-        response = requests.get(
-            pdf_url,
-            stream=True,
-            timeout=60,
-        )
+        response = requests.get(pdf_url, stream=True, timeout=60)
         response.raise_for_status()
         with open(file_path, "wb") as f:
             for chunk in response.iter_content(1024 * 8):
@@ -107,10 +123,10 @@ class ArxivClient:
 
         return file_path
 
-    def _extract_pdf_text(self, arxiv_result: arxiv.Result, topic: str) -> str | None:
+    def _extract_pdf_text(self, pdf_url: str, entry_id: str, topic: str) -> str | None:
         try:
             out_dir = str(settings.data.pdf_dir / topic.strip())
-            pdf_path = self._download_pdf_locally(arxiv_result, out_dir)
+            pdf_path = self._download_pdf_locally(pdf_url, entry_id, out_dir)
             doc = fitz.open(pdf_path)
             text_parts: list[str] = []
             for page in doc:
@@ -146,7 +162,7 @@ class ArxivClient:
         ) as exc:
             logger.exception(
                 "Failed to extract text from PDF for %s: %s",
-                getattr(arxiv_result, "entry_id", "<unknown>"),
+                entry_id,
                 exc,
             )
             return None

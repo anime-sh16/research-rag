@@ -43,8 +43,11 @@ class SimpleIngestionPipeline:
         self.all_unique_papers: list[list[ArxivResult]] = []
 
     def fetch_paper_single_topic(self, topic: str) -> TopicIngestionStats:
+        # Phase 1: fetch metadata only (no PDF downloads) for the full candidate pool
         topic_papers = self.arxiv_client.get_arxiv_results(
-            query=topic, max_results=settings.ingestion.fetch_per_topic
+            query=topic,
+            max_results=settings.ingestion.fetch_per_topic,
+            download_pdf=False,
         )
 
         topic_papers_unique: list[ArxivResult] = []
@@ -56,6 +59,10 @@ class SimpleIngestionPipeline:
             if paper.entry_id not in self.seen_ids:
                 self.seen_ids.add(paper.entry_id)
                 topic_papers_unique.append(paper)
+
+        # Phase 2: download PDFs only for the selected papers
+        for paper in topic_papers_unique:
+            self.arxiv_client.populate_full_text(paper)
 
         self.all_unique_papers.append(topic_papers_unique)
 
