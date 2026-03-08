@@ -1,6 +1,8 @@
+import os
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import fitz
 import pytest
 
 from src.ingestion.arxiv_client import ArxivClient, ArxivResult
@@ -108,3 +110,44 @@ class TestGetArxivResults:
     def test_result_count_matches_api_output(self, client: ArxivClient) -> None:
         client.client.results.return_value = [_make_mock_raw_result()] * 3
         assert len(client.get_arxiv_results("transformers", max_results=3)) == 3
+
+
+class TestDownloadAndExtraction:
+    def test_download_pdf_success(self, tmp_path, client: ArxivClient) -> None:
+        raw = _make_mock_raw_result()
+        raw.pdf_url = "http://example.com/foo.pdf"
+        # fake response object
+        fake_resp = MagicMock()
+        fake_resp.iter_content.return_value = [b"abc", b""]
+        fake_resp.raise_for_status.return_value = None
+        with patch(
+            "src.ingestion.arxiv_client.requests.get", return_value=fake_resp
+        ) as mock_get:
+            path = client._download_pdf_locally(raw, str(tmp_path))
+        assert path.startswith(str(tmp_path))
+        assert path.endswith("1706.03762.pdf")
+        assert path and os.path.exists(path)
+        with open(path, "rb") as f:
+            assert f.read() == b"abc"
+        mock_get.assert_called_with("http://example.com/foo.pdf", stream=True)
+
+    def test_extract_pdf_text_success(self, tmp_path, client: ArxivClient) -> None:
+        # create a minimal PDF containing known text
+        pdf_file = tmp_path / "test.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Hello world")
+        doc.save(str(pdf_file))
+
+        raw = _make_mock_raw_result()
+        with patch.object(client, "_download_pdf_locally", return_value=str(pdf_file)):
+            text = client._extract_pdf_text(raw)
+        assert "Hello world" in text
+
+    def test_extract_pdf_text_failure(self, client: ArxivClient) -> None:
+        raw = _make_mock_raw_result()
+        with patch.object(
+            client, "_download_pdf_locally", side_effect=Exception("oops")
+        ):
+            text = client._extract_pdf_text(raw)
+        assert text is None

@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings
 
 class DataConfig(BaseModel):
     temp_dir: Path = Path("data/tmp")
+    pdf_dir: Path = Path("data/pdfs")
     ingested_chunks_file: str = "ingested_chunks.jsonl"
     query_cache_file: str = "query_cache.jsonl"
 

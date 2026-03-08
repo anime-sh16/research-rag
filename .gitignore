@@ -12,6 +12,7 @@ wheels/
 
 notebooks/
 data/tmp/
+data/pdfs/
 CLAUDE.md
 PLAN.md
 OBJECTIVE.md
