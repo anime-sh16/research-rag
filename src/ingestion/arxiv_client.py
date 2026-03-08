@@ -45,9 +45,13 @@ class ArxivClient:
     ) -> list[ArxivResult]:
         logger.info("Fetching up to %d papers for query: '%s'", max_results, query)
         search = arxiv.Search(query=query, max_results=max_results, sort_by=sort_by)
-        results = [
-            self._parse_arxiv_result(r, query) for r in self.client.results(search)
-        ]
+        results = []
+        for r in self.client.results(search):
+            try:
+                results.append(self._parse_arxiv_result(r, query))
+            except Exception:
+                logger.exception("Skipping paper %s due to parse error.", r.entry_id)
+
         logger.info("Fetched %d papers.", len(results))
         return results
 
@@ -82,7 +86,7 @@ class ArxivClient:
 
         entry_id = arxiv_result.entry_id.split("/")[-1].split("v")[0]
 
-        # Check if alreadyy exists
+        # Check if already exists
         file_path = os.path.join(output_dir, f"{entry_id}.pdf")
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             return file_path
@@ -93,6 +97,7 @@ class ArxivClient:
         response = requests.get(
             pdf_url,
             stream=True,
+            timeout=60,
         )
         response.raise_for_status()
         with open(file_path, "wb") as f:
@@ -133,7 +138,12 @@ class ArxivClient:
 
             # collapse 3+ newlines to 2
             return re.sub(r"(\n\s*){3,}", "\n\n", full_text)
-        except Exception as exc:
+        except (
+            requests.RequestException,
+            fitz.FileDataError,
+            OSError,
+            ValueError,
+        ) as exc:
             logger.exception(
                 "Failed to extract text from PDF for %s: %s",
                 getattr(arxiv_result, "entry_id", "<unknown>"),

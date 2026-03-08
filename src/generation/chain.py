@@ -1,11 +1,26 @@
 import logging
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.config.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _is_rate_limit_error(exc: BaseException) -> bool:
+    return isinstance(exc, genai_errors.ClientError) and (
+        getattr(exc, "status_code", None) == 429 or "429" in str(exc)
+    )
+
 
 SYSTEM_INSTRUCTION = "You are a research assistant. Answer questions based only on the provided context from ArXiv papers. If the context does not contain enough information, say 'I don't have enough information to answer this.'"
 
@@ -28,6 +43,13 @@ class RAGChain:
             parts.append(f"[{i}] {title}\n{text}")
         return "\n\n".join(parts)
 
+    @retry(
+        retry=retry_if_exception(_is_rate_limit_error),
+        wait=wait_exponential(multiplier=60, min=60, max=480),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     def generate(self, query: str, chunks: list[dict]) -> str:
         logger.info(
             "Generating answer for query: '%s' using %d chunks.", query, len(chunks)

@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from src.config.config import settings
@@ -35,8 +35,12 @@ class QueryResponse(BaseModel):
 @app.post("/query", response_model=QueryResponse)
 def query(request: QueryRequest) -> QueryResponse:
     logger.info("Received query: '%s'", request.question)
-    chunks = retriever.retrieve(request.question)
-    answer = chain.generate(request.question, chunks)
+    try:
+        chunks = retriever.retrieve(request.question)
+        answer = chain.generate(request.question, chunks)
+    except Exception as e:
+        logger.exception("Query pipeline failed for: '%s'", request.question)
+        raise HTTPException(status_code=503, detail=str(e))
     logger.info("Returning answer with %d sources.", len(chunks))
     sources = [
         SourceChunk(

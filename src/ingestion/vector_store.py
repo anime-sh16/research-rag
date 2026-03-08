@@ -114,7 +114,7 @@ class VectorStore:
             texts = [chunk.source_text for chunk in batch]
 
             logger.info(
-                "Embedding batch %d–%d / %d chunks.",
+                "Embedding batch %d-%d / %d chunks.",
                 batch_start + 1,
                 batch_start + len(batch),
                 total,

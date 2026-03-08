@@ -4,12 +4,27 @@ import logging
 from pathlib import Path
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 from qdrant_client import QdrantClient
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from src.config.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _is_rate_limit_error(exc: BaseException) -> bool:
+    return isinstance(exc, genai_errors.ClientError) and (
+        getattr(exc, "status_code", None) == 429 or "429" in str(exc)
+    )
+
 
 COLLECTION_NAME = settings.db.collection_name
 VECTOR_DIM = settings.db.embedding_dimension
@@ -31,17 +46,26 @@ class Retriever:
     def _load_cache(self) -> dict[str, list[float]]:
         """Load existing query cache from JSONL into memory as {hash: vector}."""
         cache: dict[str, list[float]] = {}
-        if QUERY_CACHE_FILE.exists():
+        if not QUERY_CACHE_FILE.exists():
+            return cache
+        try:
             with open(QUERY_CACHE_FILE, "r") as f:
                 for line in f:
-                    entry = json.loads(line.strip())
+                    line = line.strip()
+                    if not line:
+                        continue
+                    entry = json.loads(line)
                     cache[entry["hash"]] = entry["embedding"]
+        except (OSError, json.JSONDecodeError, KeyError):
+            logger.warning(
+                "Query cache at %s is corrupt — starting fresh.", QUERY_CACHE_FILE
+            )
         return cache
 
     def _save_to_cache(
         self, query: str, query_hash: str, embedding: list[float]
     ) -> None:
-        """Append a new query entry to teh JSONL cache file."""
+        """Append a new query entry to the JSONL cache file."""
         Path(QUERY_CACHE_FILE).parent.mkdir(parents=True, exist_ok=True)
         with open(QUERY_CACHE_FILE, "a") as f:
             f.write(
@@ -55,6 +79,13 @@ class Retriever:
                 + "\n"
             )
 
+    @retry(
+        retry=retry_if_exception(_is_rate_limit_error),
+        wait=wait_exponential(multiplier=60, min=60, max=480),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
     def _embed_query(self, query: str) -> list[float]:
         response = self.gemini_client.models.embed_content(
             model=settings.db.embedding_model,
@@ -84,13 +115,13 @@ class Retriever:
         logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
         query_vector = self._get_query_vector(query)
 
-        # query_points is teh current API — .search() is removed in latest client
+        # query_points is the current API — .search() is removed in latest client
         results = self.qdrant_client.query_points(
             collection_name=COLLECTION_NAME,
             query=query_vector,  # list[float] → dense nearest neighbour search
             limit=self.top_k,
             with_payload=True,
-        ).points  # returns QueryResponse, .points is teh list
+        ).points  # returns QueryResponse, .points is the list
 
         chunks = [
             {

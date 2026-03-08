@@ -59,7 +59,9 @@ class SimpleIngestionPipeline:
 
         self.all_unique_papers.append(topic_papers_unique)
 
-        logger.info(f"Fetched {len(topic_papers_unique)} unique papers for '{topic}'")
+        logger.info(
+            "Fetched %d unique papers for '%s'.", len(topic_papers_unique), topic
+        )
 
         return TopicIngestionStats(
             topic=topic,
@@ -83,16 +85,21 @@ class SimpleIngestionPipeline:
     def process(self) -> IngestionRunSummary:
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         logger.info(
-            f"Starting ingestion pipeline for {len(self.topics)} topics (run_id={run_id})"
+            "Starting ingestion pipeline for %d topics (run_id=%s).",
+            len(self.topics),
+            run_id,
         )
 
         all_stats: list[TopicIngestionStats] = []
         all_chunks: list[ChunkMetaData] = []
 
         for topic in self.topics:
-            topic_stats, topic_chunks = self.process_single_topic(topic)
-            all_stats.append(topic_stats)
-            all_chunks.extend(topic_chunks)
+            try:
+                topic_stats, topic_chunks = self.process_single_topic(topic)
+                all_stats.append(topic_stats)
+                all_chunks.extend(topic_chunks)
+            except Exception as e:
+                logger.error("Failed to process topic '%s': %s", topic, e)
 
         run_summary = IngestionRunSummary(
             run_id=run_id,
