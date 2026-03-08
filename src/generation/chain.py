@@ -16,8 +16,8 @@ Question: {question}"""
 
 
 class RAGChain:
-    def __init__(self, model: str = "gemini-2.5-flash-lite"):
-        self.client = genai.Client(api_key=settings.google_api_key)
+    def __init__(self, model: str = settings.generation.model):
+        self.client = genai.Client(api_key=settings.google_api_key.get_secret_value())
         self.model = model
 
     def _format_context(self, chunks: list[dict]) -> str:
@@ -40,7 +40,7 @@ class RAGChain:
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.1,
+                temperature=settings.generation.temperature,
             ),
         )
 

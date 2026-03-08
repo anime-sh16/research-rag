@@ -3,15 +3,16 @@ import logging
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from src.config.config import settings
 from src.generation.chain import RAGChain
 from src.retrieval.retriever import Retriever
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="ArXiv RAG API")
+app = FastAPI(title=settings.api.title)
 
-retriever = Retriever(top_k=5)
-chain = RAGChain(model="gemini-2.5-flash-lite")
+retriever = Retriever(top_k=settings.generation.top_k)
+chain = RAGChain(model=settings.generation.model)
 
 
 class QueryRequest(BaseModel):

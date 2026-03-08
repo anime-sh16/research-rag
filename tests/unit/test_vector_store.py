@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.config.config import settings
 from src.ingestion.chunker import ChunkMetaData
 
 
@@ -103,6 +104,6 @@ class TestNormalizeEmbedding:
         assert abs(magnitude - 1.0) < 1e-6
 
     def test_full_dim_embedding_returned_unchanged(self, vector_store) -> None:
-        embedding = [0.5] * 3072
+        embedding = [0.5] * settings.db.full_embedding_dimension
         result = vector_store._normalize_embedding(embedding)
         assert result == embedding

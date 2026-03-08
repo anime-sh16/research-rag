@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime
 
-from src.config.config import data_settings, db_settings
+from src.config.config import settings
 from src.ingestion.arxiv_client import ArxivClient
 from src.ingestion.chunker import BasicChunker
 from src.ingestion.vector_store import VectorStore
@@ -15,9 +15,9 @@ class SimpleIngestionPipeline:
     def __init__(
         self,
         query: str,
-        max_results: int = 10,
-        chunk_size: int = 512,
-        chunk_overlap: int = 50,
+        max_results: int = settings.ingestion.max_results,
+        chunk_size: int = settings.ingestion.chunk_size,
+        chunk_overlap: int = settings.ingestion.chunk_overlap,
     ):
         self.arxiv_client = ArxivClient()
         self.chunker = BasicChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -32,12 +32,12 @@ class SimpleIngestionPipeline:
         )
         all_chunks = self.chunker.chunk_all_results(arxiv_results)
 
-        temp_output_file = data_settings.temp_dir / f"{self.query}.jsonl"
+        temp_output_file = settings.data.temp_dir / f"{self.query}.jsonl"
         self.save_chunks_to_json(all_chunks, temp_output_file)
         logger.info("Saved %d chunks to %s", len(all_chunks), temp_output_file)
 
         vector_store = VectorStore()
-        vector_store.ensure_collection(collection_name=db_settings.collection_name)
+        vector_store.ensure_collection(collection_name=settings.db.collection_name)
         vector_store.upsert_chunks(all_chunks)
         logger.info("Ingestion complete. %d chunks upserted.", len(all_chunks))
 

@@ -4,6 +4,7 @@ from datetime import datetime
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
 
+from src.config.config import settings
 from src.ingestion.arxiv_client import ArxivResult
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,11 @@ class ChunkMetaData(BaseModel):
 
 
 class BasicChunker:
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 50):
+    def __init__(
+        self,
+        chunk_size: int = settings.ingestion.chunk_size,
+        chunk_overlap: int = settings.ingestion.chunk_overlap,
+    ):
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,

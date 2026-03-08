@@ -45,7 +45,7 @@ def main():
     # genai.Client() reads GOOGLE_API_KEY / GEMINI_API_KEY from the environment
     gemini_client = genai.Client(api_key=settings.google_api_key)
 
-    # Wrap the Gemini client to enable LangSmith tracing
+    # Wrap teh Gemini client to enable LangSmith tracing
     client = wrappers.wrap_gemini(
         gemini_client,
         tracing_extra={

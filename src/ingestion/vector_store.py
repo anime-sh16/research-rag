@@ -7,34 +7,34 @@ from google.genai import types
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from src.config.config import db_settings, settings
+from src.config.config import settings
 from src.ingestion.chunker import ChunkMetaData
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_NAME = db_settings.collection_name
-VECTOR_DIM = db_settings.embedding_dimension
-FULL_EMBEDDING_DIM = (
-    3072  # gemini-embedding-001 native output size — skip normalisation at this dim
-)
+COLLECTION_NAME = settings.db.collection_name
+VECTOR_DIM = settings.db.embedding_dimension
+FULL_EMBEDDING_DIM = settings.db.full_embedding_dimension
 
 
 class VectorStore:
     def __init__(self):
         self.qdrant_client = QdrantClient(
             url=settings.qdrant_url,
-            api_key=settings.qdrant_api_key,
+            api_key=settings.qdrant_api_key.get_secret_value(),
         )
-        self.gemini_client = genai.Client(api_key=settings.google_api_key)
+        self.gemini_client = genai.Client(
+            api_key=settings.google_api_key.get_secret_value()
+        )
 
     def _embed_text(
         self,
         text: str | list[str],
-        task_type: str = "SEMANTIC_SIMILARITY",
+        task_type: str = settings.db.ingest_task_type,
         output_dimensionality: int = VECTOR_DIM,
     ) -> list[list[float]]:
         embeddings = self.gemini_client.models.embed_content(
-            model="gemini-embedding-001",
+            model=settings.db.embedding_model,
             contents=text,
             config=types.EmbedContentConfig(
                 task_type=task_type, output_dimensionality=output_dimensionality

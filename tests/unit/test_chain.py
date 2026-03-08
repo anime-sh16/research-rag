@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.config.config import settings
 from src.generation.chain import SYSTEM_INSTRUCTION, RAGChain
 
 
@@ -131,7 +132,7 @@ class TestGenerate:
         chain.generate("Any question?", sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         model = call_kwargs.kwargs.get("model") or call_kwargs.args[0]
-        assert model == "gemini-2.5-flash-lite"
+        assert model == settings.generation.model
 
     def test_generate_with_empty_chunks(self, chain: RAGChain) -> None:
         """Should not raise — empty context is valid, model decides what to do."""
