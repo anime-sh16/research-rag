@@ -2,8 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.generation.chain import RAGChain, PROMPT_TEMPLATE, SYSTEM_INSTRUCTION
-
+from src.generation.chain import SYSTEM_INSTRUCTION, RAGChain
 
 
 @pytest.fixture
@@ -28,24 +27,35 @@ def chain(mock_gemini_response: MagicMock):
 @pytest.fixture
 def sample_chunks() -> list[dict]:
     return [
-        {"title": "Attention Is All You Need", "text": "The transformer architecture uses self-attention."},
-        {"title": "BERT: Pre-training of Deep Bidirectional Transformers", "text": "BERT is pre-trained using masked language modelling."},
+        {
+            "title": "Attention Is All You Need",
+            "text": "The transformer architecture uses self-attention.",
+        },
+        {
+            "title": "BERT: Pre-training of Deep Bidirectional Transformers",
+            "text": "BERT is pre-trained using masked language modelling.",
+        },
     ]
 
 
-
 class TestFormatContext:
-    def test_numbers_chunks_sequentially(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_numbers_chunks_sequentially(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         result = chain._format_context(sample_chunks)
         assert result.startswith("[1]")
         assert "[2]" in result
 
-    def test_includes_title_and_text(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_includes_title_and_text(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         result = chain._format_context(sample_chunks)
         assert "Attention Is All You Need" in result
         assert "self-attention" in result
 
-    def test_chunks_separated_by_double_newline(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_chunks_separated_by_double_newline(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         result = chain._format_context(sample_chunks)
         assert "\n\n" in result
 
@@ -68,43 +78,56 @@ class TestFormatContext:
         assert result.count("\n\n") == 0
 
 
-
 class TestGenerate:
-    def test_returns_model_text(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_returns_model_text(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         result = chain.generate("What is attention?", sample_chunks)
         assert result == "This is a generated answer."
 
-    def test_calls_generate_content_once(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_calls_generate_content_once(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         chain.generate("What is attention?", sample_chunks)
         chain._mock_client.models.generate_content.assert_called_once()
 
-    def test_prompt_contains_question(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_prompt_contains_question(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         query = "What is attention?"
         chain.generate(query, sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         prompt = call_kwargs.kwargs.get("contents") or call_kwargs.args[1]
         assert query in prompt
 
-    def test_prompt_contains_context(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_prompt_contains_context(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         chain.generate("What is BERT?", sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         prompt = call_kwargs.kwargs.get("contents") or call_kwargs.args[1]
         assert "self-attention" in prompt
         assert "masked language modelling" in prompt
 
-    def test_system_instruction_is_set(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_system_instruction_is_set(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         chain.generate("Any question?", sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert config.system_instruction == SYSTEM_INSTRUCTION
 
-    def test_temperature_is_low(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_temperature_is_low(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         chain.generate("Any question?", sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert config.temperature == pytest.approx(0.1)
 
-    def test_uses_correct_model(self, chain: RAGChain, sample_chunks: list[dict]) -> None:
+    def test_uses_correct_model(
+        self, chain: RAGChain, sample_chunks: list[dict]
+    ) -> None:
         chain.generate("Any question?", sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         model = call_kwargs.kwargs.get("model") or call_kwargs.args[0]

@@ -1,5 +1,7 @@
+import logging
 import uuid
 
+import numpy as np
 from google import genai
 from google.genai import types
 from qdrant_client import QdrantClient
@@ -8,8 +10,13 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 from src.config.config import db_settings, settings
 from src.ingestion.chunker import ChunkMetaData
 
+logger = logging.getLogger(__name__)
+
 COLLECTION_NAME = db_settings.collection_name
 VECTOR_DIM = db_settings.embedding_dimension
+FULL_EMBEDDING_DIM = (
+    3072  # gemini-embedding-001 native output size — skip normalisation at this dim
+)
 
 
 class VectorStore:
@@ -25,7 +32,7 @@ class VectorStore:
         text: str | list[str],
         task_type: str = "SEMANTIC_SIMILARITY",
         output_dimensionality: int = VECTOR_DIM,
-    ):
+    ) -> list[list[float]]:
         embeddings = self.gemini_client.models.embed_content(
             model="gemini-embedding-001",
             contents=text,
@@ -40,13 +47,10 @@ class VectorStore:
         ]
         return embedding_values
 
-    def _normalize_embedding(self, embedding: list[float]):
-        if len(embedding) != 3072:
-            import numpy as np
-
-            embedding = np.array(embedding)
-            embedding = embedding / np.linalg.norm(embedding)
-            embedding = embedding.tolist()
+    def _normalize_embedding(self, embedding: list[float]) -> list[float]:
+        if len(embedding) != FULL_EMBEDDING_DIM:
+            arr = np.array(embedding)
+            embedding = (arr / np.linalg.norm(arr)).tolist()
         return embedding
 
     def ensure_collection(
@@ -62,22 +66,23 @@ class VectorStore:
                     size=embedding_dimension, distance=Distance.COSINE
                 ),
             )
-            print(f"Collection {collection_name} created.")
+            logger.info("Collection %s created.", collection_name)
         else:
-            print(f"Collection {collection_name} exists.")
+            logger.info("Collection %s already exists.", collection_name)
 
-    def upsert_chunks(self, chunks: list[ChunkMetaData]):
+    def upsert_chunks(
+        self, chunks: list[ChunkMetaData], collection_name: str = COLLECTION_NAME
+    ) -> None:
         texts = [chunk.source_text for chunk in chunks]
         embeddings = self._embed_text(texts)
 
-        points = []
-        for chunk, emb_vector in zip(chunks, embeddings):
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
-                    vector=emb_vector,
-                    payload=chunk.model_dump(mode="json"),
-                )
+        points = [
+            PointStruct(
+                id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
+                vector=emb_vector,
+                payload=chunk.model_dump(mode="json"),
             )
+            for chunk, emb_vector in zip(chunks, embeddings)
+        ]
 
-        self.qdrant_client.upsert(collection_name=COLLECTION_NAME, points=points)
+        self.qdrant_client.upsert(collection_name=collection_name, points=points)

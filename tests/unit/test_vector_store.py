@@ -50,7 +50,9 @@ class TestEnsureCollection:
     def test_checks_the_correct_collection_name(self, vector_store) -> None:
         vector_store._mock_qdrant.collection_exists.return_value = False
         vector_store.ensure_collection("my_collection")
-        vector_store._mock_qdrant.collection_exists.assert_called_once_with("my_collection")
+        vector_store._mock_qdrant.collection_exists.assert_called_once_with(
+            "my_collection"
+        )
 
 
 class TestUpsertChunks:
@@ -59,7 +61,8 @@ class TestUpsertChunks:
         fake_embedding = MagicMock()
         fake_embedding.values = [0.1] * 768
         vector_store._mock_gemini.models.embed_content.return_value.embeddings = [
-            fake_embedding, fake_embedding
+            fake_embedding,
+            fake_embedding,
         ]
         vector_store.upsert_chunks(chunks)
         call_kwargs = vector_store._mock_gemini.models.embed_content.call_args
@@ -91,13 +94,12 @@ class TestUpsertChunks:
 
 
 class TestNormalizeEmbedding:
-    def test_short_embedding_is_normalized_to_unit_length(
-        self, vector_store
-    ) -> None:
+    def test_short_embedding_is_normalized_to_unit_length(self, vector_store) -> None:
         import math
+
         embedding = [3.0, 4.0]  # magnitude = 5.0 → normalized = [0.6, 0.8]
         result = vector_store._normalize_embedding(embedding)
-        magnitude = math.sqrt(sum(x ** 2 for x in result))
+        magnitude = math.sqrt(sum(x**2 for x in result))
         assert abs(magnitude - 1.0) < 1e-6
 
     def test_full_dim_embedding_returned_unchanged(self, vector_store) -> None:

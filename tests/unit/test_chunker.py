@@ -161,9 +161,7 @@ class TestChunkResult:
 
 
 class TestChunkAllResults:
-    def test_aggregates_chunks_from_all_papers(
-        self, chunker: BasicChunker
-    ) -> None:
+    def test_aggregates_chunks_from_all_papers(self, chunker: BasicChunker) -> None:
         paper_a = ArxivResult(
             entry_id="aaa",
             title="Paper A",

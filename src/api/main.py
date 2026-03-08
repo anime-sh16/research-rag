@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from src.generation.chain import RAGChain
 from src.retrieval.retriever import Retriever
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ArXiv RAG API")
 
@@ -29,12 +33,10 @@ class QueryResponse(BaseModel):
 
 @app.post("/query", response_model=QueryResponse)
 def query(request: QueryRequest) -> QueryResponse:
+    logger.info("Received query: '%s'", request.question)
     chunks = retriever.retrieve(request.question)
-
     answer = chain.generate(request.question, chunks)
-
-    # step 3: build the sources list from the retrieved chunks
-    # hint: use a list comprehension over chunks, constructing a SourceChunk for each
+    logger.info("Returning answer with %d sources.", len(chunks))
     sources = [
         SourceChunk(
             title=chunk["title"],
@@ -44,6 +46,5 @@ def query(request: QueryRequest) -> QueryResponse:
             score=chunk["score"],
         )
         for chunk in chunks
-    ]  
-
+    ]
     return QueryResponse(answer=answer, sources=sources)

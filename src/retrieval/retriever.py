@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 from google import genai
@@ -7,6 +8,8 @@ from google.genai import types
 from qdrant_client import QdrantClient
 
 from src.config.config import data_settings, db_settings, settings
+
+logger = logging.getLogger(__name__)
 
 COLLECTION_NAME = db_settings.collection_name
 VECTOR_DIM = db_settings.embedding_dimension
@@ -66,14 +69,17 @@ class Retriever:
         query_hash = hashlib.md5(query.encode()).hexdigest()
 
         if query_hash in self._cache:
+            logger.debug("Cache hit for query: '%s'", query)
             return self._cache[query_hash]
 
+        logger.debug("Cache miss — embedding query: '%s'", query)
         embedding = self._embed_query(query)
         self._cache[query_hash] = embedding
         self._save_to_cache(query, query_hash, embedding)
         return embedding
 
     def retrieve(self, query: str) -> list[dict]:
+        logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
         query_vector = self._get_query_vector(query)
 
         # query_points is the current API — .search() is removed in latest client
@@ -84,7 +90,7 @@ class Retriever:
             with_payload=True,
         ).points  # returns QueryResponse, .points is the list
 
-        return [
+        chunks = [
             {
                 "score": result.score,
                 "text": result.payload.get("source_text"),
@@ -95,3 +101,9 @@ class Retriever:
             }
             for result in results
         ]
+        logger.info(
+            "Retrieved %d chunks (scores: %s).",
+            len(chunks),
+            [round(c["score"], 3) for c in chunks],
+        )
+        return chunks

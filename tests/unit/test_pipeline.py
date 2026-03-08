@@ -1,10 +1,10 @@
 from datetime import datetime
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.ingestion.arxiv_client import ArxivResult
-from src.ingestion.chunker import BasicChunker, ChunkMetaData
+from src.ingestion.chunker import ChunkMetaData
 
 
 def _make_chunk(paper_id: str = "1234", index: int = 0) -> ChunkMetaData:
@@ -43,9 +43,7 @@ def pipeline():
 
 
 class TestProcess:
-    def test_calls_arxiv_client_with_query_and_max_results(
-        self, pipeline
-    ) -> None:
+    def test_calls_arxiv_client_with_query_and_max_results(self, pipeline) -> None:
         pipeline._mock_arxiv.get_arxiv_results.return_value = []
         pipeline._mock_chunker.chunk_all_results.return_value = []
         pipeline.process()
@@ -76,8 +74,12 @@ class TestProcess:
 
     def test_ensures_collection_before_upsert(self, pipeline) -> None:
         call_order = []
-        pipeline._mock_vector_store.ensure_collection.side_effect = lambda **kw: call_order.append("ensure")
-        pipeline._mock_vector_store.upsert_chunks.side_effect = lambda chunks: call_order.append("upsert")
+        pipeline._mock_vector_store.ensure_collection.side_effect = lambda **kw: (
+            call_order.append("ensure")
+        )
+        pipeline._mock_vector_store.upsert_chunks.side_effect = lambda chunks: (
+            call_order.append("upsert")
+        )
         pipeline._mock_arxiv.get_arxiv_results.return_value = []
         pipeline._mock_chunker.chunk_all_results.return_value = []
         pipeline.process()

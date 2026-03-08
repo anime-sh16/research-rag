@@ -1,7 +1,11 @@
+import logging
+
 from google import genai
 from google.genai import types
 
 from src.config.config import settings
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_INSTRUCTION = "You are a research assistant. Answer questions based only on the provided context from ArXiv papers. If the context does not contain enough information, say 'I don't have enough information to answer this.'"
 
@@ -25,6 +29,9 @@ class RAGChain:
         return "\n\n".join(parts)
 
     def generate(self, query: str, chunks: list[dict]) -> str:
+        logger.info(
+            "Generating answer for query: '%s' using %d chunks.", query, len(chunks)
+        )
         context = self._format_context(chunks)
         prompt = PROMPT_TEMPLATE.format(context=context, question=query)
 
@@ -37,4 +44,5 @@ class RAGChain:
             ),
         )
 
+        logger.debug("Generated answer: '%s'", response.text[:100])
         return response.text

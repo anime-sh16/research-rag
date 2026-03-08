@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
 
 from src.ingestion.arxiv_client import ArxivResult
+
+logger = logging.getLogger(__name__)
 
 
 class ChunkMetaData(BaseModel):
@@ -26,7 +29,7 @@ class BasicChunker:
             chunk_overlap=chunk_overlap,
         )
 
-    def chunk_result(self, arxiv_result: ArxivResult) -> list[dict]:
+    def chunk_result(self, arxiv_result: ArxivResult) -> list[ChunkMetaData]:
 
         full_content = f"Title: {arxiv_result.title}\n\nSummary: {arxiv_result.summary}"
 
@@ -56,8 +59,14 @@ class BasicChunker:
 
         return chunks
 
-    def chunk_all_results(self, arxiv_results: list[ArxivResult]):
+    def chunk_all_results(
+        self, arxiv_results: list[ArxivResult]
+    ) -> list[ChunkMetaData]:
+        logger.info("Chunking %d papers.", len(arxiv_results))
         all_chunks = []
         for arxiv_result in arxiv_results:
-            all_chunks.extend(self.chunk_result(arxiv_result))
+            chunks = self.chunk_result(arxiv_result)
+            logger.debug("'%s' → %d chunks.", arxiv_result.title, len(chunks))
+            all_chunks.extend(chunks)
+        logger.info("Total chunks produced: %d.", len(all_chunks))
         return all_chunks
