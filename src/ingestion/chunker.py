@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 class ChunkMetaData(BaseModel):
     chunk_id: str
     chunk_index: int
+    topic: str | None = "Unknown"
     paper_id: str
     title: str
     comment: str | None
@@ -49,6 +50,7 @@ class BasicChunker:
                 ChunkMetaData(
                     chunk_id=f"{arxiv_result.entry_id}_{arxiv_result.title.replace(' ', '_')}_{i}",
                     chunk_index=i,
+                    topic=arxiv_result.topic,
                     paper_id=arxiv_result.entry_id,
                     title=arxiv_result.title,
                     authors=arxiv_result.authors if arxiv_result.authors else [],

@@ -16,6 +16,7 @@ def full_arxiv_result() -> ArxivResult:
     return ArxivResult(
         entry_id="1234",
         title="Test Paper 1",
+        topic="transformers",
         published=datetime(2022, 1, 1),
         summary="This is a test summary",
         authors=["John Doe", "Jane Doe 2"],
@@ -31,12 +32,27 @@ def sparse_arxiv_result() -> ArxivResult:
     return ArxivResult(
         entry_id="1234",
         title="Test Paper 1",
+        topic=None,
         published=datetime(2022, 1, 1),
         summary="This is a test summary",
         authors=None,
         comment=None,
         primary_category="cs.RO",
         categories=None,
+    )
+
+
+def _make_long_result(topic: str = "cs.LG") -> ArxivResult:
+    return ArxivResult(
+        entry_id="5678",
+        title="Long Paper",
+        topic=topic,
+        published=datetime(2023, 6, 1),
+        summary="word " * 100,
+        authors=["Alice"],
+        comment=None,
+        primary_category="cs.LG",
+        categories=["cs.LG"],
     )
 
 
@@ -55,10 +71,24 @@ class TestChunkResult:
         assert chunk.chunk_index == 0
         assert chunk.paper_id == "1234"
         assert chunk.title == "Test Paper 1"
+        assert chunk.topic == "transformers"
         assert chunk.authors == ["John Doe", "Jane Doe 2"]
         assert chunk.primary_category == "cs.RO"
         assert chunk.categories == ["cs.RO", "cs.LG"]
         assert chunk.published == datetime(2022, 1, 1)
+        assert chunk.comment == "This is a test comment"
+
+    def test_topic_propagates_to_chunk(
+        self, chunker: BasicChunker, full_arxiv_result: ArxivResult
+    ) -> None:
+        chunk = chunker.chunk_result(full_arxiv_result)[0]
+        assert chunk.topic == full_arxiv_result.topic
+
+    def test_none_topic_propagates_to_chunk(
+        self, chunker: BasicChunker, sparse_arxiv_result: ArxivResult
+    ) -> None:
+        chunk = chunker.chunk_result(sparse_arxiv_result)[0]
+        assert chunk.topic is None
 
     def test_source_text_includes_title_and_summary(
         self, chunker: BasicChunker, full_arxiv_result: ArxivResult
@@ -99,64 +129,24 @@ class TestChunkResult:
 
     def test_long_text_produces_multiple_chunks(self) -> None:
         chunker = BasicChunker(chunk_size=50, chunk_overlap=0)
-        result = ArxivResult(
-            entry_id="5678",
-            title="Long Paper",
-            published=datetime(2023, 6, 1),
-            summary="word " * 100,
-            authors=["Alice"],
-            comment=None,
-            primary_category="cs.LG",
-            categories=["cs.LG"],
-        )
-        chunks = chunker.chunk_result(result)
+        chunks = chunker.chunk_result(_make_long_result())
         assert len(chunks) > 1
 
     def test_chunk_indices_are_sequential(self) -> None:
         chunker = BasicChunker(chunk_size=50, chunk_overlap=0)
-        result = ArxivResult(
-            entry_id="5678",
-            title="Long Paper",
-            published=datetime(2023, 6, 1),
-            summary="word " * 100,
-            authors=["Alice"],
-            comment=None,
-            primary_category="cs.LG",
-            categories=["cs.LG"],
-        )
-        chunks = chunker.chunk_result(result)
+        chunks = chunker.chunk_result(_make_long_result())
         for i, chunk in enumerate(chunks):
             assert chunk.chunk_index == i
 
     def test_chunk_ids_are_unique(self) -> None:
         chunker = BasicChunker(chunk_size=50, chunk_overlap=0)
-        result = ArxivResult(
-            entry_id="5678",
-            title="Long Paper",
-            published=datetime(2023, 6, 1),
-            summary="word " * 100,
-            authors=["Alice"],
-            comment=None,
-            primary_category="cs.LG",
-            categories=["cs.LG"],
-        )
-        chunks = chunker.chunk_result(result)
+        chunks = chunker.chunk_result(_make_long_result())
         chunk_ids = [chunk.chunk_id for chunk in chunks]
         assert len(chunk_ids) == len(set(chunk_ids))
 
     def test_all_chunks_share_same_paper_id(self) -> None:
         chunker = BasicChunker(chunk_size=50, chunk_overlap=0)
-        result = ArxivResult(
-            entry_id="5678",
-            title="Long Paper",
-            published=datetime(2023, 6, 1),
-            summary="word " * 100,
-            authors=["Alice"],
-            comment=None,
-            primary_category="cs.LG",
-            categories=["cs.LG"],
-        )
-        chunks = chunker.chunk_result(result)
+        chunks = chunker.chunk_result(_make_long_result())
         assert all(chunk.paper_id == "5678" for chunk in chunks)
 
 
@@ -165,6 +155,7 @@ class TestChunkAllResults:
         paper_a = ArxivResult(
             entry_id="aaa",
             title="Paper A",
+            topic="rag",
             published=datetime(2021, 1, 1),
             summary="Short summary for paper A.",
             authors=["Author A"],
@@ -175,6 +166,7 @@ class TestChunkAllResults:
         paper_b = ArxivResult(
             entry_id="bbb",
             title="Paper B",
+            topic="transformers",
             published=datetime(2021, 2, 1),
             summary="Short summary for paper B.",
             authors=["Author B"],

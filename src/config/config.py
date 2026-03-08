@@ -1,12 +1,14 @@
 import os
 from pathlib import Path
 
+import arxiv
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings
 
 
 class DataConfig(BaseModel):
     temp_dir: Path = Path("data/tmp")
+    ingested_chunks_file: str = "ingested_chunks.jsonl"
     query_cache_file: str = "query_cache.jsonl"
 
 
@@ -20,7 +22,14 @@ class DBConfig(BaseModel):
 
 
 class IngestionConfig(BaseModel):
-    max_results: int = 10
+    topics: list[str] = [
+        "transformer architecture",
+        "retrieval augmented generation",
+        "large language model fine-tuning",
+    ]
+    fetch_sort_by: arxiv.SortCriterion = arxiv.SortCriterion.Relevance
+    fetch_per_topic: int = 20
+    target_papers_no: int = 10
     chunk_size: int = 512
     chunk_overlap: int = 50
 

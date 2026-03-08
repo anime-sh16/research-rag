@@ -38,12 +38,12 @@ def client() -> ArxivClient:
 class TestParseArxivResult:
     def test_entry_id_strips_url_prefix_and_version(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result(entry_id="https://arxiv.org/abs/1706.03762v5")
-        result = client._parse_arxiv_result(raw)
+        result = client._parse_arxiv_result(raw, "transformers")
         assert result.entry_id == "1706.03762"
 
     def test_entry_id_without_version_suffix(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result(entry_id="https://arxiv.org/abs/1706.03762")
-        result = client._parse_arxiv_result(raw)
+        result = client._parse_arxiv_result(raw, "transformers")
         assert result.entry_id == "1706.03762"
 
     def test_authors_extracted_by_name(self, client: ArxivClient) -> None:
@@ -51,27 +51,32 @@ class TestParseArxivResult:
         a.name = "Vaswani"
         b.name = "Shazeer"
         raw = _make_mock_raw_result(authors=[a, b])
-        result = client._parse_arxiv_result(raw)
+        result = client._parse_arxiv_result(raw, "transformers")
         assert result.authors == ["Vaswani", "Shazeer"]
 
     def test_empty_authors_returns_empty_list(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result(authors=[])
-        result = client._parse_arxiv_result(raw)
+        result = client._parse_arxiv_result(raw, "transformers")
         assert result.authors == []
 
     def test_comment_preserved_when_present(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result(comment="9 pages, 5 figures")
-        result = client._parse_arxiv_result(raw)
+        result = client._parse_arxiv_result(raw, "transformers")
         assert result.comment == "9 pages, 5 figures"
 
     def test_none_comment_stored_as_none(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result(comment=None)
-        result = client._parse_arxiv_result(raw)
+        result = client._parse_arxiv_result(raw, "transformers")
         assert result.comment is None
 
     def test_returns_arxiv_result_instance(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result()
-        assert isinstance(client._parse_arxiv_result(raw), ArxivResult)
+        assert isinstance(client._parse_arxiv_result(raw, "transformers"), ArxivResult)
+
+    def test_topic_stored_from_query(self, client: ArxivClient) -> None:
+        raw = _make_mock_raw_result()
+        result = client._parse_arxiv_result(raw, "retrieval augmented generation")
+        assert result.topic == "retrieval augmented generation"
 
     def test_scalar_fields_mapped_correctly(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result(
@@ -81,7 +86,7 @@ class TestParseArxivResult:
             primary_category="cs.CL",
             categories=["cs.CL"],
         )
-        result = client._parse_arxiv_result(raw)
+        result = client._parse_arxiv_result(raw, "transformers")
         assert result.title == "BERT"
         assert result.published == datetime(2018, 10, 11)
         assert result.summary == "Deep bidirectional transformers."

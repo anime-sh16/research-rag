@@ -3,57 +3,138 @@ import logging
 import os
 from datetime import datetime
 
+from pydantic import BaseModel
+
 from src.config.config import settings
-from src.ingestion.arxiv_client import ArxivClient
-from src.ingestion.chunker import BasicChunker
+from src.ingestion.arxiv_client import ArxivClient, ArxivResult
+from src.ingestion.chunker import BasicChunker, ChunkMetaData
 from src.ingestion.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
 
+class TopicIngestionStats(BaseModel):
+    topic: str
+    fetched: int  # how many arxiv returned
+    selected: int  # how many passed dedup + cap
+    chunks: int = 0  # how many chunks produced
+
+
+class IngestionRunSummary(BaseModel):
+    run_id: str  # timestamp string
+    topics: list[TopicIngestionStats]
+    total_papers: int
+    total_chunks: int
+
+
 class SimpleIngestionPipeline:
     def __init__(
         self,
-        query: str,
-        max_results: int = settings.ingestion.max_results,
+        topics: list[str] | str = settings.ingestion.topics,
+        target_papers_no: int = settings.ingestion.target_papers_no,
         chunk_size: int = settings.ingestion.chunk_size,
         chunk_overlap: int = settings.ingestion.chunk_overlap,
     ):
         self.arxiv_client = ArxivClient()
         self.chunker = BasicChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-        self.query = query
-        self.max_results = max_results
+        self.topics = topics if isinstance(topics, list) else [topics]
+        self.target_papers_no_per_topic = target_papers_no
+        self.seen_ids = set()
+        self.all_unique_papers: list[list[ArxivResult]] = []
 
-    def process(self):
-        logger.info("Starting ingestion pipeline for query: '%s'", self.query)
-
-        arxiv_results = self.arxiv_client.get_arxiv_results(
-            self.query, max_results=self.max_results
+    def fetch_paper_single_topic(self, topic: str) -> TopicIngestionStats:
+        topic_papers = self.arxiv_client.get_arxiv_results(
+            query=topic, max_results=settings.ingestion.fetch_per_topic
         )
-        all_chunks = self.chunker.chunk_all_results(arxiv_results)
 
-        temp_output_file = settings.data.temp_dir / f"{self.query}.jsonl"
-        self.save_chunks_to_json(all_chunks, temp_output_file)
-        logger.info("Saved %d chunks to %s", len(all_chunks), temp_output_file)
+        topic_papers_unique: list[ArxivResult] = []
+
+        for paper in topic_papers:
+            if len(topic_papers_unique) >= self.target_papers_no_per_topic:
+                break
+
+            if paper.entry_id not in self.seen_ids:
+                self.seen_ids.add(paper.entry_id)
+                topic_papers_unique.append(paper)
+
+        self.all_unique_papers.append(topic_papers_unique)
+
+        logger.info(f"Fetched {len(topic_papers_unique)} unique papers for '{topic}'")
+
+        return TopicIngestionStats(
+            topic=topic,
+            fetched=len(topic_papers),
+            selected=len(topic_papers_unique),
+        )
+
+    def chunk_single_topic(
+        self, topic_papers: list[ArxivResult]
+    ) -> list[ChunkMetaData]:
+        return self.chunker.chunk_all_results(topic_papers)
+
+    def process_single_topic(
+        self, topic: str
+    ) -> tuple[TopicIngestionStats, list[ChunkMetaData]]:
+        topic_stats = self.fetch_paper_single_topic(topic)
+        topic_chunks = self.chunk_single_topic(self.all_unique_papers[-1])
+        topic_stats.chunks = len(topic_chunks)
+        return topic_stats, topic_chunks
+
+    def process(self) -> IngestionRunSummary:
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        logger.info(
+            f"Starting ingestion pipeline for {len(self.topics)} topics (run_id={run_id})"
+        )
+
+        all_stats: list[TopicIngestionStats] = []
+        all_chunks: list[ChunkMetaData] = []
+
+        for topic in self.topics:
+            topic_stats, topic_chunks = self.process_single_topic(topic)
+            all_stats.append(topic_stats)
+            all_chunks.extend(topic_chunks)
+
+        run_summary = IngestionRunSummary(
+            run_id=run_id,
+            topics=all_stats,
+            total_papers=sum(s.selected for s in all_stats),
+            total_chunks=len(all_chunks),
+        )
+
+        chunks_file = settings.data.temp_dir / f"chunks_{run_id}.jsonl"
+        summary_file = settings.data.temp_dir / f"summary_{run_id}.json"
+
+        self.save_chunks_to_jsonl(all_chunks, chunks_file)
+        self.save_summary_to_json(run_summary, summary_file)
+        logger.info(
+            "Saved %d chunks → %s | summary → %s",
+            len(all_chunks),
+            chunks_file,
+            summary_file,
+        )
 
         vector_store = VectorStore()
         vector_store.ensure_collection(collection_name=settings.db.collection_name)
         vector_store.upsert_chunks(all_chunks)
         logger.info("Ingestion complete. %d chunks upserted.", len(all_chunks))
 
-        return all_chunks
+        return run_summary
 
-    def save_chunks_to_json(self, chunks: list, output_file: str):
+    def save_chunks_to_jsonl(self, chunks: list, output_file):
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         with open(output_file, "w") as f:
             for chunk in chunks:
                 f.write(
                     json.dumps(
                         chunk.model_dump(),
-                        indent=4,
                         default=lambda obj: (
                             obj.isoformat() if isinstance(obj, datetime) else str(obj)
                         ),
                     )
                 )
                 f.write("\n")
+
+    def save_summary_to_json(self, summary: IngestionRunSummary, output_file):
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        with open(output_file, "w") as f:
+            f.write(summary.model_dump_json(indent=2))

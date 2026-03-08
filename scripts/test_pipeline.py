@@ -1,4 +1,5 @@
 from src.ingestion.pipeline import SimpleIngestionPipeline
 
-pipeline = SimpleIngestionPipeline("machine learning")
-chunks = pipeline.process()
+pipeline = SimpleIngestionPipeline(topics=["machine learning"])
+summary = pipeline.process()
+print(summary.model_dump_json(indent=2))
