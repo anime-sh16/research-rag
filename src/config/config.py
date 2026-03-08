@@ -18,7 +18,7 @@ class DBConfig(BaseModel):
     embedding_dimension: int = 768
     full_embedding_dimension: int = 3072  # gemini-embedding-001 defaults to 3072. process teh normalization automatically
     embedding_model: str = "gemini-embedding-001"
-    ingest_task_type: str = "SEMANTIC_SIMILARITY"
+    ingest_task_type: str = "RETRIEVAL_DOCUMENT"
     retrieval_task_type: str = "RETRIEVAL_QUERY"
 
 

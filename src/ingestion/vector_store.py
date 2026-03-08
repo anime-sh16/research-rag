@@ -106,11 +106,36 @@ class VectorStore:
         free-tier limit (~50 × 512 tokens ≈ 25,600 tokens per batch).
         A short sleep between batches avoids sustained quota pressure.
         """
-        total = len(chunks)
+        # Skip chunks already in Qdrant to avoid wasting Gemini quota on re-runs
+        point_ids = [
+            str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)) for chunk in chunks
+        ]
+        existing = self.qdrant_client.retrieve(
+            collection_name=collection_name,
+            ids=point_ids,
+            with_payload=False,
+            with_vectors=False,
+        )
+        existing_ids = {str(record.id) for record in existing}
+        new_chunks = [
+            chunk for chunk, pid in zip(chunks, point_ids) if pid not in existing_ids
+        ]
+
+        if not new_chunks:
+            logger.info("All %d chunks already in Qdrant — skipping.", len(chunks))
+            return
+        if len(new_chunks) < len(chunks):
+            logger.info(
+                "Skipping %d already-ingested chunks; embedding %d new.",
+                len(chunks) - len(new_chunks),
+                len(new_chunks),
+            )
+
+        total = len(new_chunks)
         all_points: list[PointStruct] = []
 
         for batch_start in range(0, total, _EMBED_BATCH_SIZE):
-            batch = chunks[batch_start : batch_start + _EMBED_BATCH_SIZE]
+            batch = new_chunks[batch_start : batch_start + _EMBED_BATCH_SIZE]
             texts = [chunk.source_text for chunk in batch]
 
             logger.info(

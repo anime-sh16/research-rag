@@ -40,9 +40,10 @@ class SimpleIngestionPipeline:
         self.topics = topics if isinstance(topics, list) else [topics]
         self.target_papers_no_per_topic = target_papers_no
         self.seen_ids = set()
-        self.all_unique_papers: list[list[ArxivResult]] = []
 
-    def fetch_paper_single_topic(self, topic: str) -> TopicIngestionStats:
+    def fetch_paper_single_topic(
+        self, topic: str
+    ) -> tuple[TopicIngestionStats, list[ArxivResult]]:
         # Phase 1: fetch metadata only (no PDF downloads) for the full candidate pool
         topic_papers = self.arxiv_client.get_arxiv_results(
             query=topic,
@@ -64,17 +65,16 @@ class SimpleIngestionPipeline:
         for paper in topic_papers_unique:
             self.arxiv_client.populate_full_text(paper)
 
-        self.all_unique_papers.append(topic_papers_unique)
-
         logger.info(
             "Fetched %d unique papers for '%s'.", len(topic_papers_unique), topic
         )
 
-        return TopicIngestionStats(
+        stats = TopicIngestionStats(
             topic=topic,
             fetched=len(topic_papers),
             selected=len(topic_papers_unique),
         )
+        return stats, topic_papers_unique
 
     def chunk_single_topic(
         self, topic_papers: list[ArxivResult]
@@ -84,8 +84,8 @@ class SimpleIngestionPipeline:
     def process_single_topic(
         self, topic: str
     ) -> tuple[TopicIngestionStats, list[ChunkMetaData]]:
-        topic_stats = self.fetch_paper_single_topic(topic)
-        topic_chunks = self.chunk_single_topic(self.all_unique_papers[-1])
+        topic_stats, topic_papers = self.fetch_paper_single_topic(topic)
+        topic_chunks = self.chunk_single_topic(topic_papers)
         topic_stats.chunks = len(topic_chunks)
         return topic_stats, topic_chunks
 
@@ -97,6 +97,9 @@ class SimpleIngestionPipeline:
             run_id,
         )
 
+        vector_store = VectorStore()
+        vector_store.ensure_collection(collection_name=settings.db.collection_name)
+
         all_stats: list[TopicIngestionStats] = []
         all_chunks: list[ChunkMetaData] = []
 
@@ -105,6 +108,10 @@ class SimpleIngestionPipeline:
                 topic_stats, topic_chunks = self.process_single_topic(topic)
                 all_stats.append(topic_stats)
                 all_chunks.extend(topic_chunks)
+                vector_store.upsert_chunks(topic_chunks)
+                logger.info(
+                    "Upserted %d chunks for topic '%s'.", len(topic_chunks), topic
+                )
             except Exception as e:
                 logger.error("Failed to process topic '%s': %s", topic, e)
 
@@ -127,9 +134,6 @@ class SimpleIngestionPipeline:
             summary_file,
         )
 
-        vector_store = VectorStore()
-        vector_store.ensure_collection(collection_name=settings.db.collection_name)
-        vector_store.upsert_chunks(all_chunks)
         logger.info("Ingestion complete. %d chunks upserted.", len(all_chunks))
 
         return run_summary
