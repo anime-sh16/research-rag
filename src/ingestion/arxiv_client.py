@@ -26,12 +26,16 @@ class ArxivResult(BaseModel):
     comment: str | None
     primary_category: str
     categories: list[str] | None
-    full_text: str
+    full_text: str | None
 
 
 class ArxivClient:
     def __init__(self):
-        self.client = arxiv.Client()
+        self.client = arxiv.Client(
+            page_size=settings.ingestion.fetch_per_topic,
+            delay_seconds=5,
+            num_retries=3,
+        )
 
     def get_arxiv_results(
         self,
@@ -86,7 +90,10 @@ class ArxivClient:
         os.makedirs(output_dir, exist_ok=True)
 
         logger.info("Downloading PDF from %s to %s", pdf_url, file_path)
-        response = requests.get(pdf_url, stream=True)
+        response = requests.get(
+            pdf_url,
+            stream=True,
+        )
         response.raise_for_status()
         with open(file_path, "wb") as f:
             for chunk in response.iter_content(1024 * 8):

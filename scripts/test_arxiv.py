@@ -1,12 +1,14 @@
 import json
+import logging
 from datetime import datetime
 
 from src.ingestion.arxiv_client import ArxivClient
 from src.ingestion.chunker import BasicChunker
 
+logging.basicConfig(level=logging.DEBUG)
 client = ArxivClient()
 chunker = BasicChunker()
-results = client.get_arxiv_results("RAG", max_results=5)
+results = client.get_arxiv_results("retrieval augmented generation", max_results=2)
 
 for result in results:
     print("Title: ", result.title)

@@ -30,17 +30,22 @@ class BasicChunker:
         chunk_size: int = settings.ingestion.chunk_size,
         chunk_overlap: int = settings.ingestion.chunk_overlap,
     ):
-        self.splitter = RecursiveCharacterTextSplitter(
+        self.splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            encoding_name="o200k_base",
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
 
     def chunk_result(self, arxiv_result: ArxivResult) -> list[ChunkMetaData]:
+        if arxiv_result.full_text:
+            full_content = arxiv_result.full_text
+        else:
+            full_content = (
+                f"Title: {arxiv_result.title}\n\nSummary: {arxiv_result.summary}"
+            )
 
-        full_content = f"Title: {arxiv_result.title}\n\nSummary: {arxiv_result.summary}"
-
-        if arxiv_result.comment:
-            full_content += f"\n\nComment: {arxiv_result.comment}"
+            if arxiv_result.comment:
+                full_content += f"\n\nComment: {arxiv_result.comment}"
 
         result_chunks = self.splitter.split_text(full_content)
 

@@ -29,10 +29,10 @@ class IngestionConfig(BaseModel):
         "large language model fine-tuning",
     ]
     fetch_sort_by: arxiv.SortCriterion = arxiv.SortCriterion.Relevance
-    fetch_per_topic: int = 20
-    target_papers_no: int = 10
+    fetch_per_topic: int = 250
+    target_papers_no: int = 70
     chunk_size: int = 512
-    chunk_overlap: int = 50
+    chunk_overlap: int = 64
 
 
 class GenerationConfig(BaseModel):
