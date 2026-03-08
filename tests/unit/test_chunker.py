@@ -23,6 +23,8 @@ def full_arxiv_result() -> ArxivResult:
         comment="This is a test comment",
         primary_category="cs.RO",
         categories=["cs.RO", "cs.LG"],
+        pdf_url=None,
+        full_text=None,
     )
 
 
@@ -39,6 +41,8 @@ def sparse_arxiv_result() -> ArxivResult:
         comment=None,
         primary_category="cs.RO",
         categories=None,
+        pdf_url=None,
+        full_text=None,
     )
 
 
@@ -53,6 +57,8 @@ def _make_long_result(topic: str = "cs.LG") -> ArxivResult:
         comment=None,
         primary_category="cs.LG",
         categories=["cs.LG"],
+        pdf_url=None,
+        full_text=None,
     )
 
 
@@ -162,6 +168,8 @@ class TestChunkAllResults:
             comment=None,
             primary_category="cs.AI",
             categories=["cs.AI"],
+            pdf_url=None,
+            full_text=None,
         )
         paper_b = ArxivResult(
             entry_id="bbb",
@@ -173,6 +181,8 @@ class TestChunkAllResults:
             comment=None,
             primary_category="cs.CV",
             categories=["cs.CV"],
+            pdf_url=None,
+            full_text=None,
         )
         chunks = chunker.chunk_all_results([paper_a, paper_b])
         paper_ids = {chunk.paper_id for chunk in chunks}
