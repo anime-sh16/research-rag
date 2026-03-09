@@ -1,0 +1,87 @@
+# LangSmith Tracing & Evaluation Schema
+# for the referece about the tracing on langsmith.
+# Just documentaion. Update in the code as well in case of changes.
+
+tracing_conventions:
+  # The format for root span names (e.g., query|general|v1-baseline|0312)
+  run_name_template: "query|{query_type}|{pipeline_version}|{date}"
+
+allowed_tags:
+  pipeline_versions:
+    - "v1-baseline"
+  query_types:
+    - "general"
+    - "factual"
+    - "comparative"
+    - "conceptual"
+  environments:
+    - "development"
+    - "production"
+    - "evaluation"
+  retrieval_methods:
+    - "dense"
+
+metadata_schemas:
+  root_span:
+    description: "Attached to the query_pipeline orchestrator function."
+    required_keys:
+      - summary
+    summary_structure:
+      - query (string)
+      - chunks_retrieved (int)
+      - papers_cited (list of strings)
+      - answer_preview (string)
+      - retrieval_method (string)
+      - flag (string or null)
+
+  retrieval_span:
+    description: "Attached to the retrieval module."
+    required_keys:
+      - top_k_requested (int)
+      - chunks_returned (list of dicts)
+    chunks_returned_structure:
+      - chunk_index (string)
+      - paper_id (string)
+      - score (float)
+      - text_preview (string - max 100 chars)
+
+  generation_span:
+    description: "Attached to the LLM generation module."
+    required_keys:
+      - prompt_version (string)
+      - full_prompt_sent (string)
+      - system_instruction (string)
+      - model (string)
+      - context_chunks_used (list of strings)
+      - input_tokens (int)
+      - output_tokens (int)
+
+feedback_metrics:
+  # Proxy metrics logged on every operational query
+  proxy_scores:
+    - name: "retrieval_avg_score"
+      type: "float"
+      description: "Mean similarity score of retrieved chunks."
+    - name: "retrieval_score_spread"
+      type: "float"
+      description: "Difference between highest and lowest chunk scores."
+    - name: "source_diversity"
+      type: "int"
+      description: "Number of unique papers in the retrieved context."
+
+  # RAGAS metrics logged only during evaluation runs
+  evaluation_scores:
+    - "context_precision"
+    - "faithfulness"
+    - "answer_relevancy"
+    - "context_recall"
+
+auto_flags:
+  description: "Conditions that trigger a warning flag in the root summary metadata."
+  conditions:
+    - flag_name: "empty_retrieval"
+      trigger: "0 chunks returned from vector store"
+    - flag_name: "low_retrieval_score"
+      trigger: "retrieval_avg_score < 0.5"
+    - flag_name: "single_source_warning"
+      trigger: "source_diversity == 1 AND chunks_retrieved > 1"

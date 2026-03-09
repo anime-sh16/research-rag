@@ -66,7 +66,18 @@ def run_pipeline(question: str) -> dict:
     # Handle the empty retrieval edge case gracefully
     if not chunks:
         if run:
-            run.add_metadata({"summary": {"flag": "empty_retrieval"}})
+            run.add_metadata(
+                {
+                    "summary": {
+                        "query": question,
+                        "chunks_retrieved": 0,
+                        "papers_cited": [],
+                        "answer_preview": "I don't have enough context to answer that.",
+                        "retrieval_method": "dense",
+                        "flag": "empty_retrieval",
+                    }
+                }
+            )
         return {"answer": "I don't have enough context to answer that.", "sources": []}
 
     answer = chain.generate(question, chunks)

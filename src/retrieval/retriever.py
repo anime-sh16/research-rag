@@ -157,9 +157,14 @@ class Retriever:
                 )
 
                 # Log the raw data so you can inspect it in the UI
+                trace_chunks = chunks.copy()
+                # shorten the text in each chunk for the trace
+                for chunk in trace_chunks:
+                    chunk["text"] = chunk["text"][:100]
+
                 run.add_metadata(
                     {
-                        "chunks_returned": chunks,
+                        "chunks_returned": trace_chunks,
                         "top_k_requested": self.top_k,
                     }
                 )
