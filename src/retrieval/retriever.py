@@ -6,6 +6,8 @@ from pathlib import Path
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
+from langsmith import traceable, wrappers
+from langsmith.run_helpers import get_current_run, log_feedback
 from qdrant_client import QdrantClient
 from tenacity import (
     before_sleep_log,
@@ -37,8 +39,14 @@ class Retriever:
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key.get_secret_value(),
         )
-        self.gemini_client = genai.Client(
-            api_key=settings.google_api_key.get_secret_value()
+        self.gemini_client = wrappers.wrap_gemini(
+            genai.Client(api_key=settings.google_api_key.get_secret_value()),
+            tracing_extra={
+                "tags": ["gemini", "python"],
+                "metadata": {
+                    "integration": "google-genai",
+                },
+            },
         )
         self.top_k = top_k
         self._cache = self._load_cache()
@@ -111,6 +119,7 @@ class Retriever:
         self._save_to_cache(query, query_hash, embedding)
         return embedding
 
+    @traceable(run_type="retriever", name="retrieval/dense_search")
     def retrieve(self, query: str) -> list[dict]:
         logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
         query_vector = self._get_query_vector(query)
@@ -134,6 +143,33 @@ class Retriever:
             }
             for result in results
         ]
+
+        # LangSmith Tracing & Proxy Metrics
+        run = get_current_run()
+        if run:
+            if not chunks:
+                run.add_tags(["empty_retrieval"])
+            else:
+                scores = [c["score"] for c in chunks]
+                unique_papers = len(
+                    set(c["paper_id"] for c in chunks if c.get("paper_id"))
+                )
+
+                # Log the raw data so you can inspect it in the UI
+                run.add_metadata(
+                    {
+                        "chunks_returned": chunks,
+                        "top_k_requested": self.top_k,
+                    }
+                )
+
+                # Log proxy metrics directly to the trace
+                log_feedback(key="retrieval_avg_score", score=sum(scores) / len(scores))
+                log_feedback(
+                    key="retrieval_score_spread", score=max(scores) - min(scores)
+                )
+                log_feedback(key="source_diversity", score=unique_papers)
+
         logger.info(
             "Retrieved %d chunks (scores: %s).",
             len(chunks),

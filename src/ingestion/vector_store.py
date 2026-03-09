@@ -6,6 +6,7 @@ import numpy as np
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
+from langsmith import wrappers
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 from tenacity import (
@@ -28,7 +29,7 @@ FULL_EMBEDDING_DIM = settings.db.full_embedding_dimension
 # Rate-limit constants (tuned for 30K TPM / 1K RPD free tier)
 # 50 chunks × 512 tokens = ~25,600 tokens per batch — safely under 30K TPM
 _EMBED_BATCH_SIZE = 50
-_INTER_BATCH_SLEEP_SECS = 2  # polite pause between successful batches
+_INTER_BATCH_SLEEP_SECS = 61  # polite pause between successful batches
 
 
 def _is_rate_limit_error(exc: BaseException) -> bool:
@@ -43,8 +44,14 @@ class VectorStore:
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key.get_secret_value(),
         )
-        self.gemini_client = genai.Client(
-            api_key=settings.google_api_key.get_secret_value()
+        self.gemini_client = wrappers.wrap_gemini(
+            genai.Client(api_key=settings.google_api_key.get_secret_value()),
+            tracing_extra={
+                "tags": ["gemini", "python"],
+                "metadata": {
+                    "integration": "google-genai",
+                },
+            },
         )
 
     @retry(

@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from src.config.config import settings
+from src.config.logging_config import setup_ingestion_logging
 from src.ingestion.arxiv_client import ArxivClient, ArxivResult
 from src.ingestion.chunker import BasicChunker, ChunkMetaData
 from src.ingestion.vector_store import VectorStore
@@ -91,60 +92,68 @@ class SimpleIngestionPipeline:
 
     def process(self) -> IngestionRunSummary:
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        logger.info(
-            "Starting ingestion pipeline for %d topics (run_id=%s).",
-            len(self.topics),
-            run_id,
-        )
+        _log_handler = setup_ingestion_logging(run_id)
 
-        vector_store = VectorStore()
-        vector_store.ensure_collection(collection_name=settings.db.collection_name)
+        try:
+            logger.info(
+                "Starting ingestion pipeline for %d topics (run_id=%s).",
+                len(self.topics),
+                run_id,
+            )
 
-        all_stats: list[TopicIngestionStats] = []
-        all_chunks: list[ChunkMetaData] = []
+            vector_store = VectorStore()
+            vector_store.ensure_collection(collection_name=settings.db.collection_name)
 
-        for topic in self.topics:
-            try:
-                topic_stats, topic_chunks = self.process_single_topic(topic)
-                all_stats.append(topic_stats)
-                all_chunks.extend(topic_chunks)
-                vector_store.upsert_chunks(topic_chunks)
-                logger.info(
-                    "Upserted %d chunks for topic '%s'.", len(topic_chunks), topic
-                )
-            except Exception as e:
-                logger.error("Failed to process topic '%s': %s", topic, e)
+            all_stats: list[TopicIngestionStats] = []
+            all_chunks: list[ChunkMetaData] = []
 
-        run_summary = IngestionRunSummary(
-            run_id=run_id,
-            topics=all_stats,
-            total_papers=sum(s.selected for s in all_stats),
-            total_chunks=len(all_chunks),
-        )
+            for topic in self.topics:
+                try:
+                    topic_stats, topic_chunks = self.process_single_topic(topic)
+                    all_stats.append(topic_stats)
+                    all_chunks.extend(topic_chunks)
+                    vector_store.upsert_chunks(topic_chunks)
+                    logger.info(
+                        "Upserted %d chunks for topic '%s'.", len(topic_chunks), topic
+                    )
+                except Exception as e:
+                    logger.error("Failed to process topic '%s': %s", topic, e)
 
-        chunks_file = settings.data.temp_dir / f"chunks_{run_id}.jsonl"
-        summary_file = settings.data.temp_dir / f"summary_{run_id}.json"
+            run_summary = IngestionRunSummary(
+                run_id=run_id,
+                topics=all_stats,
+                total_papers=sum(s.selected for s in all_stats),
+                total_chunks=len(all_chunks),
+            )
 
-        self.save_chunks_to_jsonl(all_chunks, chunks_file)
-        self.save_summary_to_json(run_summary, summary_file)
-        logger.info(
-            "Saved %d chunks → %s | summary → %s",
-            len(all_chunks),
-            chunks_file,
-            summary_file,
-        )
+            chunks_file = settings.data.temp_dir / f"chunks_{run_id}.jsonl"
+            summary_file = settings.data.temp_dir / f"summary_{run_id}.json"
 
-        logger.info("Ingestion complete. %d chunks upserted.", len(all_chunks))
+            self.save_chunks_to_jsonl(all_chunks, chunks_file)
+            self.save_summary_to_json(run_summary, summary_file)
+            logger.info(
+                "Saved %d chunks → %s | summary → %s",
+                len(all_chunks),
+                chunks_file,
+                summary_file,
+            )
+
+            logger.info("Ingestion complete. %d chunks upserted.", len(all_chunks))
+
+        finally:
+            logging.getLogger().removeHandler(_log_handler)
+            _log_handler.close()
 
         return run_summary
 
     def save_chunks_to_jsonl(self, chunks: list, output_file):
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             for chunk in chunks:
                 f.write(
                     json.dumps(
                         chunk.model_dump(),
+                        ensure_ascii=False,
                         default=lambda obj: (
                             obj.isoformat() if isinstance(obj, datetime) else str(obj)
                         ),

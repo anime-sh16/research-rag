@@ -3,6 +3,8 @@ import logging
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
+from langsmith import traceable, wrappers
+from langsmith.run_helpers import get_current_run
 from tenacity import (
     before_sleep_log,
     retry,
@@ -22,6 +24,8 @@ def _is_rate_limit_error(exc: BaseException) -> bool:
     )
 
 
+PROMPT_VERSION = "v1-baseline"
+
 SYSTEM_INSTRUCTION = "You are a research assistant. Answer questions based only on the provided context from ArXiv papers. If the context does not contain enough information, say 'I don't have enough information to answer this.'"
 
 PROMPT_TEMPLATE = """Context:
@@ -32,7 +36,15 @@ Question: {question}"""
 
 class RAGChain:
     def __init__(self, model: str = settings.generation.model):
-        self.client = genai.Client(api_key=settings.google_api_key.get_secret_value())
+        self.client = wrappers.wrap_gemini(
+            genai.Client(api_key=settings.google_api_key.get_secret_value()),
+            tracing_extra={
+                "tags": ["gemini", "python"],
+                "metadata": {
+                    "integration": "google-genai",
+                },
+            },
+        )
         self.model = model
 
     def _format_context(self, chunks: list[dict]) -> str:
@@ -43,6 +55,7 @@ class RAGChain:
             parts.append(f"[{i}] {title}\n{text}")
         return "\n\n".join(parts)
 
+    @traceable(run_type="llm", name="generation/gemini")
     @retry(
         retry=retry_if_exception(_is_rate_limit_error),
         wait=wait_exponential(multiplier=60, min=60, max=480),
@@ -56,6 +69,20 @@ class RAGChain:
         )
         context = self._format_context(chunks)
         prompt = PROMPT_TEMPLATE.format(context=context, question=query)
+
+        # Log prompt details to LangSmith
+        run = get_current_run()
+        if run:
+            run.add_metadata(
+                {
+                    "prompt_version": PROMPT_VERSION,
+                    "full_prompt_sent": prompt,
+                    "system_instruction": SYSTEM_INSTRUCTION,
+                    "model": self.model,
+                    "context_chunks_used": [c.get("paper_id") for c in chunks],
+                }
+            )
+            run.add_tags([f"prompt_version:{PROMPT_VERSION}"])
 
         response = self.client.models.generate_content(
             model=self.model,

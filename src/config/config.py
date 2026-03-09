@@ -14,7 +14,7 @@ class DataConfig(BaseModel):
 
 
 class DBConfig(BaseModel):
-    collection_name: str = "arxiv_paper_1"
+    collection_name: str = "arxiv_paper_v0"
     embedding_dimension: int = 768
     full_embedding_dimension: int = 3072  # gemini-embedding-001 defaults to 3072. process teh normalization automatically
     embedding_model: str = "gemini-embedding-001"
