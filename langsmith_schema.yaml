@@ -4,7 +4,7 @@
 
 tracing_conventions:
   # The format for root span names (e.g., query|general|v1-baseline|0312)
-  run_name_template: "query|{query_type}|{pipeline_version}|{date}"
+  run_name_template: "query|{query_type}|{pipeline_version}|{date_time}"
 
 allowed_tags:
   pipeline_versions:

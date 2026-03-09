@@ -59,7 +59,7 @@ def run_pipeline(question: str) -> dict:
     run = get_current_run_tree()
 
     if run:
-        run.name = f"query|general|v1-baseline|{datetime.now().strftime('%m%d')}"
+        run.name = f"query|general|v1-baseline|{datetime.now().strftime('%m%d_%H%M%S')}"
 
     chunks = retriever.retrieve(question)
 
