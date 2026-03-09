@@ -194,10 +194,14 @@ class TestProcessSingleTopic:
 class TestProcess:
     @pytest.fixture
     def patched_pipeline(self, pipeline):
-        """Additionally patches file I/O so process() doesn't touch disk."""
+        """Additionally patches file I/O and logging so process() doesn't touch disk."""
         pipeline.save_chunks_to_jsonl = MagicMock()
         pipeline.save_summary_to_json = MagicMock()
-        return pipeline
+        with patch("src.ingestion.pipeline.setup_ingestion_logging") as mock_logging:
+            mock_log_handler = MagicMock()
+            mock_logging.return_value = mock_log_handler
+            pipeline._mock_logging = mock_logging
+            yield pipeline
 
     def test_returns_ingestion_run_summary(self, patched_pipeline) -> None:
         patched_pipeline._mock_arxiv.get_arxiv_results.return_value = []

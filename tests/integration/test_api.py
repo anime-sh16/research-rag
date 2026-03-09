@@ -79,14 +79,37 @@ class TestQueryEndpoint:
         response = client.post("/query", json={"question": ""})
         assert response.status_code == 200
 
-    def test_retriever_called_with_question(self, client: TestClient) -> None:
-        with patch("src.api.main.retriever") as mock_retriever:
+    def test_retriever_called_with_question(self) -> None:
+        with (
+            patch("src.api.main.retriever") as mock_retriever,
+            patch("src.api.main.chain") as mock_chain,
+        ):
             mock_retriever.retrieve.return_value = FAKE_CHUNKS
-            client.post("/query", json={"question": "What is LoRA?"})
+            mock_chain.generate.return_value = FAKE_ANSWER
+            from src.api.main import app
+
+            c = TestClient(app)
+            c.post("/query", json={"question": "What is LoRA?"})
             mock_retriever.retrieve.assert_called_once_with("What is LoRA?")
 
-    def test_chain_called_with_question_and_chunks(self, client: TestClient) -> None:
-        with patch("src.api.main.chain") as mock_chain:
+    def test_empty_retrieval_returns_fallback_answer(self, client: TestClient) -> None:
+        """run_pipeline short-circuits with a fallback message when retrieval is empty."""
+        with patch("src.api.main.retriever") as mock_retriever:
+            mock_retriever.retrieve.return_value = []
+            response = client.post("/query", json={"question": "Unknown topic?"})
+        assert response.status_code == 200
+        assert "don't have enough context" in response.json()["answer"].lower()
+        assert response.json()["sources"] == []
+
+    def test_chain_called_with_question_and_chunks(self) -> None:
+        with (
+            patch("src.api.main.retriever") as mock_retriever,
+            patch("src.api.main.chain") as mock_chain,
+        ):
+            mock_retriever.retrieve.return_value = FAKE_CHUNKS
             mock_chain.generate.return_value = FAKE_ANSWER
-            client.post("/query", json={"question": "What is LoRA?"})
+            from src.api.main import app
+
+            c = TestClient(app)
+            c.post("/query", json={"question": "What is LoRA?"})
             mock_chain.generate.assert_called_once_with("What is LoRA?", FAKE_CHUNKS)

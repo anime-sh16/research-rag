@@ -15,10 +15,14 @@ def mock_gemini_response() -> MagicMock:
 
 @pytest.fixture
 def chain(mock_gemini_response: MagicMock):
-    """RAGChain with the Gemini client fully patched out."""
-    with patch("src.generation.chain.genai.Client") as mock_client_cls:
-        mock_client = mock_client_cls.return_value
-        mock_client.models.generate_content.return_value = mock_gemini_response
+    """RAGChain with the Gemini client and LangSmith wrapper fully patched out."""
+    mock_client = MagicMock()
+    mock_client.models.generate_content.return_value = mock_gemini_response
+    with (
+        patch("src.generation.chain.genai.Client", return_value=mock_client),
+        patch("src.generation.chain.wrappers.wrap_gemini", return_value=mock_client),
+        patch("src.generation.chain.get_current_run_tree", return_value=None),
+    ):
         instance = RAGChain()
         # Attach mock so individual tests can inspect calls
         instance._mock_client = mock_client
@@ -140,9 +144,15 @@ class TestGenerate:
         assert isinstance(result, str)
 
     def test_custom_model_is_used(self, mock_gemini_response: MagicMock) -> None:
-        with patch("src.generation.chain.genai.Client") as mock_client_cls:
-            mock_client = mock_client_cls.return_value
-            mock_client.models.generate_content.return_value = mock_gemini_response
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_gemini_response
+        with (
+            patch("src.generation.chain.genai.Client", return_value=mock_client),
+            patch(
+                "src.generation.chain.wrappers.wrap_gemini", return_value=mock_client
+            ),
+            patch("src.generation.chain.get_current_run_tree", return_value=None),
+        ):
             custom_chain = RAGChain(model="gemini-2.5-pro")
             custom_chain.generate("test", [])
             call_kwargs = mock_client.models.generate_content.call_args
