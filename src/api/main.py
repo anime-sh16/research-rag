@@ -1,9 +1,10 @@
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException
 from langsmith import traceable
-from langsmith.run_helpers import get_current_run
+from langsmith.run_helpers import get_current_run_tree
 from pydantic import BaseModel
 
 from src.config.config import settings
@@ -46,29 +47,56 @@ class QueryResponse(BaseModel):
 
 @traceable(
     run_type="chain",
-    name="query_pipeline",
-    tags=["pipeline_version:baseline", "query_type:general"],
+    tags=[
+        "pipeline_version:v1-baseline",
+        "query_type:general",
+        "environment:development",
+        "retrieval_method:dense",
+    ],
 )
 def run_pipeline(question: str) -> dict:
     """Core orchestration logic, decoupled from HTTP for easier evaluation."""
+    run = get_current_run_tree()
+
+    if run:
+        run.name = f"query|general|v1-baseline|{datetime.now().strftime('%m%d')}"
+
     chunks = retriever.retrieve(question)
 
     # Handle the empty retrieval edge case gracefully
     if not chunks:
+        if run:
+            run.add_metadata({"summary": {"flag": "empty_retrieval"}})
         return {"answer": "I don't have enough context to answer that.", "sources": []}
 
     answer = chain.generate(question, chunks)
 
     # Add a human-readable summary to the Root Span
-    run = get_current_run()
     if run:
+        scores = [c["score"] for c in chunks]
+        avg_score = sum(scores) / len(scores) if scores else 0
+        unique_papers = len(set(c["paper_id"] for c in chunks if c.get("paper_id")))
+
+        flag = None
+        if avg_score < 0.5:
+            flag = "low_retrieval_score"
+        elif unique_papers == 1 and len(chunks) > 1:
+            flag = "single_source_warning"
+
+        # Human-Readable Summary
         run.add_metadata(
             {
                 "summary": {
+                    "query": question,
                     "chunks_retrieved": len(chunks),
+                    "papers_cited": list(
+                        set(c["paper_id"] for c in chunks if c.get("paper_id"))
+                    ),
                     "answer_preview": answer[:150] + "..."
                     if len(answer) > 150
                     else answer,
+                    "retrieval_method": "dense",
+                    "flag": flag,
                 }
             }
         )

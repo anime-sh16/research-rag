@@ -6,8 +6,8 @@ from pathlib import Path
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
-from langsmith import traceable, wrappers
-from langsmith.run_helpers import get_current_run, log_feedback
+from langsmith import Client, traceable, wrappers
+from langsmith.run_helpers import get_current_run_tree
 from qdrant_client import QdrantClient
 from tenacity import (
     before_sleep_log,
@@ -48,6 +48,7 @@ class Retriever:
                 },
             },
         )
+        self.langsmith_client = Client()
         self.top_k = top_k
         self._cache = self._load_cache()
 
@@ -145,7 +146,7 @@ class Retriever:
         ]
 
         # LangSmith Tracing & Proxy Metrics
-        run = get_current_run()
+        run = get_current_run_tree()
         if run:
             if not chunks:
                 run.add_tags(["empty_retrieval"])
@@ -163,12 +164,25 @@ class Retriever:
                     }
                 )
 
-                # Log proxy metrics directly to the trace
-                log_feedback(key="retrieval_avg_score", score=sum(scores) / len(scores))
-                log_feedback(
-                    key="retrieval_score_spread", score=max(scores) - min(scores)
+                # Log proxy metrics to LangSmith
+                self.langsmith_client.create_feedback(
+                    run_id=run.id,
+                    key="retrieval_avg_score",
+                    score=sum(scores) / len(scores),
+                    trace_id=run.trace_id,
                 )
-                log_feedback(key="source_diversity", score=unique_papers)
+                self.langsmith_client.create_feedback(
+                    run_id=run.id,
+                    key="retrieval_score_spread",
+                    score=max(scores) - min(scores),
+                    trace_id=run.trace_id,
+                )
+                self.langsmith_client.create_feedback(
+                    run_id=run.id,
+                    key="source_diversity",
+                    score=unique_papers,
+                    trace_id=run.trace_id,
+                )
 
         logger.info(
             "Retrieved %d chunks (scores: %s).",

@@ -4,7 +4,7 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 from langsmith import traceable, wrappers
-from langsmith.run_helpers import get_current_run
+from langsmith.run_helpers import get_current_run_tree
 from tenacity import (
     before_sleep_log,
     retry,
@@ -71,7 +71,7 @@ class RAGChain:
         prompt = PROMPT_TEMPLATE.format(context=context, question=query)
 
         # Log prompt details to LangSmith
-        run = get_current_run()
+        run = get_current_run_tree()
         if run:
             run.add_metadata(
                 {
@@ -92,6 +92,14 @@ class RAGChain:
                 temperature=settings.generation.temperature,
             ),
         )
+
+        if run and hasattr(response, "usage_metadata") and response.usage_metadata:
+            run.add_metadata(
+                {
+                    "input_tokens": response.usage_metadata.prompt_token_count,
+                    "output_tokens": response.usage_metadata.candidates_token_count,
+                }
+            )
 
         logger.debug("Generated answer: '%s'", response.text[:100])
         return response.text

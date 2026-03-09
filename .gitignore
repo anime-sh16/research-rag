@@ -16,6 +16,7 @@ data/pdfs/
 CLAUDE.md
 PLAN.md
 OBJECTIVE.md
+LANGSMITH_TRACING_GUIDE.md
 .claude
 .env
 .DS_Store
