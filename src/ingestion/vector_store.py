@@ -26,10 +26,11 @@ COLLECTION_NAME = settings.db.collection_name
 VECTOR_DIM = settings.db.embedding_dimension
 FULL_EMBEDDING_DIM = settings.db.full_embedding_dimension
 
-# Rate-limit constants (tuned for 30K TPM / 1K RPD free tier)
-# 50 chunks × 512 tokens = ~25,600 tokens per batch — safely under 30K TPM
-_EMBED_BATCH_SIZE = 50
-_INTER_BATCH_SLEEP_SECS = 61  # polite pause between successful batches
+# Rate-limit constants (tuned for paid tier: 3K RPM / 1M TPM / unlimited RPD)
+# 100 chunks × 512 tokens = ~51,200 tokens per batch
+# TPM ceiling: 1M ÷ 51,200 ≈ 19 batches/min → 60 ÷ 19 ≈ 3.2s needed; use 4s for headroom
+_EMBED_BATCH_SIZE = 100
+_INTER_BATCH_SLEEP_SECS = 4
 
 
 def _is_rate_limit_error(exc: BaseException) -> bool:
@@ -43,6 +44,7 @@ class VectorStore:
         self.qdrant_client = QdrantClient(
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key.get_secret_value(),
+            timeout=180,
         )
         self.gemini_client = wrappers.wrap_gemini(
             genai.Client(api_key=settings.google_api_key.get_secret_value()),
@@ -107,11 +109,11 @@ class VectorStore:
     def upsert_chunks(
         self, chunks: list[ChunkMetaData], collection_name: str = COLLECTION_NAME
     ) -> None:
-        """Embed chunks in batches and upsert to Qdrant.
+        """Embed and upsert chunks to Qdrant in batches.
 
-        Batches are capped at _EMBED_BATCH_SIZE to stay within the 30K TPM
-        free-tier limit (~50 × 512 tokens ≈ 25,600 tokens per batch).
-        A short sleep between batches avoids sustained quota pressure.
+        Each batch is embedded then immediately upserted — avoids accumulating
+        a large in-memory payload that would cause Qdrant write timeouts, and
+        gives crash-safety (partial progress is persisted per batch).
         """
         # Skip chunks already in Qdrant to avoid wasting Gemini quota on re-runs
         point_ids = [
@@ -139,7 +141,7 @@ class VectorStore:
             )
 
         total = len(new_chunks)
-        all_points: list[PointStruct] = []
+        total_upserted = 0
 
         for batch_start in range(0, total, _EMBED_BATCH_SIZE):
             batch = new_chunks[batch_start : batch_start + _EMBED_BATCH_SIZE]
@@ -153,19 +155,23 @@ class VectorStore:
             )
             embeddings = self._embed_text(texts)
 
-            all_points.extend(
+            points = [
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
                     vector=emb_vector,
                     payload=chunk.model_dump(mode="json"),
                 )
                 for chunk, emb_vector in zip(batch, embeddings)
+            ]
+
+            self.qdrant_client.upsert(collection_name=collection_name, points=points)
+            total_upserted += len(points)
+            logger.info(
+                "Upserted batch (%d points). Total so far: %d / %d.",
+                len(points),
+                total_upserted,
+                total,
             )
 
             if batch_start + _EMBED_BATCH_SIZE < total:
                 time.sleep(_INTER_BATCH_SLEEP_SECS)
-
-        self.qdrant_client.upsert(collection_name=collection_name, points=all_points)
-        logger.info(
-            "Upserted %d points to collection '%s'.", len(all_points), collection_name
-        )

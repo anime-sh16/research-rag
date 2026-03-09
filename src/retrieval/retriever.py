@@ -38,6 +38,7 @@ class Retriever:
         self.qdrant_client = QdrantClient(
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key.get_secret_value(),
+            timeout=30,
         )
         self.gemini_client = wrappers.wrap_gemini(
             genai.Client(api_key=settings.google_api_key.get_secret_value()),

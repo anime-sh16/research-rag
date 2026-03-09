@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -62,6 +63,8 @@ class SimpleIngestionPipeline:
                 self.seen_ids.add(paper.entry_id)
                 topic_papers_unique.append(paper)
 
+            # TODO: Filter by relevance and fiter out the ones that are off-domain like maths papers
+
         # Phase 2: download PDFs only for the selected papers
         for paper in topic_papers_unique:
             self.arxiv_client.populate_full_text(paper)
@@ -106,13 +109,21 @@ class SimpleIngestionPipeline:
 
             all_stats: list[TopicIngestionStats] = []
             all_chunks: list[ChunkMetaData] = []
+            total_upserted = 0
 
-            for topic in self.topics:
+            for i, topic in enumerate(self.topics):
+                if i > 0:
+                    # ArXiv rate-limits rapid successive queries — brief cooldown
+                    logger.info(
+                        "Waiting 30s before next topic to respect ArXiv rate limits."
+                    )
+                    time.sleep(30)
                 try:
                     topic_stats, topic_chunks = self.process_single_topic(topic)
                     all_stats.append(topic_stats)
                     all_chunks.extend(topic_chunks)
                     vector_store.upsert_chunks(topic_chunks)
+                    total_upserted += len(topic_chunks)
                     logger.info(
                         "Upserted %d chunks for topic '%s'.", len(topic_chunks), topic
                     )
@@ -138,7 +149,11 @@ class SimpleIngestionPipeline:
                 summary_file,
             )
 
-            logger.info("Ingestion complete. %d chunks upserted.", len(all_chunks))
+            logger.info(
+                "Ingestion complete. %d / %d chunks upserted to Qdrant.",
+                total_upserted,
+                len(all_chunks),
+            )
 
         finally:
             logging.getLogger().removeHandler(_log_handler)
