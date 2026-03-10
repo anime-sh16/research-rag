@@ -34,6 +34,7 @@ class BasicChunker:
             encoding_name="o200k_base",
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            disallowed_special=(),
         )
 
     def chunk_result(self, arxiv_result: ArxivResult) -> list[ChunkMetaData]:
