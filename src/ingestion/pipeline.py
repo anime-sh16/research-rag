@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 class TopicIngestionStats(BaseModel):
     topic: str
     fetched: int  # how many arxiv returned
-    selected: int  # how many passed dedup + cap
+    filtered_by_category: int = 0  # how many dropped by category allowlist
+    selected: int  # how many passed category filter + dedup + cap
     chunks: int = 0  # how many chunks produced
 
 
@@ -36,11 +37,17 @@ class SimpleIngestionPipeline:
         target_papers_no: int = settings.ingestion.target_papers_no,
         chunk_size: int = settings.ingestion.chunk_size,
         chunk_overlap: int = settings.ingestion.chunk_overlap,
+        allowed_categories: set[str] | None = None,
     ):
         self.arxiv_client = ArxivClient()
         self.chunker = BasicChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         self.topics = topics if isinstance(topics, list) else [topics]
         self.target_papers_no_per_topic = target_papers_no
+        self.allowed_categories = (
+            allowed_categories
+            if allowed_categories is not None
+            else settings.ingestion.allowed_categories
+        )
         self.seen_ids = set()
 
     def fetch_paper_single_topic(
@@ -54,16 +61,24 @@ class SimpleIngestionPipeline:
         )
 
         topic_papers_unique: list[ArxivResult] = []
+        filtered_by_category = 0
 
         for paper in topic_papers:
             if len(topic_papers_unique) >= self.target_papers_no_per_topic:
                 break
 
+            if paper.primary_category not in self.allowed_categories:
+                filtered_by_category += 1
+                logger.debug(
+                    "Skipping '%s' (category=%s, not in allowlist).",
+                    paper.title,
+                    paper.primary_category,
+                )
+                continue
+
             if paper.entry_id not in self.seen_ids:
                 self.seen_ids.add(paper.entry_id)
                 topic_papers_unique.append(paper)
-
-            # TODO: Filter by relevance and fiter out the ones that are off-domain like maths papers
 
         # Phase 2: download PDFs only for the selected papers
         for paper in topic_papers_unique:
@@ -76,6 +91,7 @@ class SimpleIngestionPipeline:
         stats = TopicIngestionStats(
             topic=topic,
             fetched=len(topic_papers),
+            filtered_by_category=filtered_by_category,
             selected=len(topic_papers_unique),
         )
         return stats, topic_papers_unique

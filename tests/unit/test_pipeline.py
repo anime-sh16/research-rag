@@ -13,7 +13,9 @@ from src.ingestion.pipeline import IngestionRunSummary, TopicIngestionStats
 
 
 def _make_arxiv_result(
-    paper_id: str = "1234", topic: str = "transformers"
+    paper_id: str = "1234",
+    topic: str = "transformers",
+    primary_category: str = "cs.AI",
 ) -> ArxivResult:
     return ArxivResult(
         entry_id=paper_id,
@@ -23,8 +25,8 @@ def _make_arxiv_result(
         summary="A test summary.",
         authors=["Author A"],
         comment=None,
-        primary_category="cs.AI",
-        categories=["cs.AI"],
+        primary_category=primary_category,
+        categories=[primary_category],
         pdf_url=None,
         full_text=None,
     )
@@ -138,6 +140,25 @@ class TestFetchPaperSingleTopic:
         pipeline._mock_arxiv.get_arxiv_results.return_value = []
         stats, _ = pipeline.fetch_paper_single_topic("transformers")
         assert stats.chunks == 0
+
+    def test_off_domain_paper_is_filtered(self, pipeline) -> None:
+        papers = [
+            _make_arxiv_result("math_id", primary_category="math.OC"),
+            _make_arxiv_result("cs_id", primary_category="cs.LG"),
+        ]
+        pipeline._mock_arxiv.get_arxiv_results.return_value = papers
+        stats, selected = pipeline.fetch_paper_single_topic("transformers")
+        selected_ids = [p.entry_id for p in selected]
+        assert "math_id" not in selected_ids
+        assert "cs_id" in selected_ids
+        assert stats.filtered_by_category == 1
+        assert stats.selected == 1
+
+    def test_filtered_paper_not_added_to_seen_ids(self, pipeline) -> None:
+        papers = [_make_arxiv_result("phys_id", primary_category="hep-ph")]
+        pipeline._mock_arxiv.get_arxiv_results.return_value = papers
+        pipeline.fetch_paper_single_topic("transformers")
+        assert "phys_id" not in pipeline.seen_ids
 
 
 # ---------------------------------------------------------------------------

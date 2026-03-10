@@ -24,15 +24,26 @@ class DBConfig(BaseModel):
 
 class IngestionConfig(BaseModel):
     topics: list[str] = [
-        "language models NLP",
+        "large language models LLM NLP transformers",
         "retrieval augmented generation knowledge",
-        "generative models diffusion GAN",
-        "fine-tuning transfer learning adaptation",
+        "diffusion probabilistic models image generation deep learning",
+        "fine-tuning pretrained language models instruction tuning",
         "reinforcement learning human feedback alignment",
-        "vision transformers multimodal learning",
-        "agents planning tool use autonomous",
-        "efficient inference compression optimization",
+        "vision transformers ViT multimodal learning",
+        "LLM agents planning tool use reasoning",
+        "LLM inference optimization quantization pruning",
     ]
+    # ArXiv primary_category allowlist — rejects off-domain papers (math, physics, chemistry)
+    allowed_categories: set[str] = {
+        "cs.LG",  # Machine Learning
+        "cs.CL",  # Computation and Language (NLP)
+        "cs.AI",  # Artificial Intelligence
+        "cs.CV",  # Computer Vision and Pattern Recognition
+        "cs.IR",  # Information Retrieval
+        "cs.NE",  # Neural and Evolutionary Computing
+        "cs.MA",  # Multiagent Systems (LLM agents papers)
+        "stat.ML",  # Statistics - Machine Learning
+    }
     fetch_sort_by: arxiv.SortCriterion = arxiv.SortCriterion.Relevance
     fetch_per_topic: int = 250
     target_papers_no: int = 70
