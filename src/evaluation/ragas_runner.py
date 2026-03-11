@@ -14,6 +14,8 @@ Flow:
 import argparse
 import asyncio
 import json
+import instructor
+from ragas.llms.base import InstructorLLM, InstructorModelArgs
 import logging
 import os
 from datetime import datetime
@@ -40,10 +42,16 @@ logger = logging.getLogger(__name__)
 os.environ["GOOGLE_API_KEY"] = settings.google_api_key.get_secret_value()
 
 _gemini_client = genai.Client(api_key=settings.google_api_key.get_secret_value())
-_evaluator_llm = llm_factory(
+# _evaluator_llm = llm_factory(
+#     model=settings.evaluation.evaluator_model,
+#     provider="google",
+#     client=_gemini_client,
+# )
+_async_instructor = instructor.from_genai(_gemini_client, mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS, use_async=True)
+_evaluator_llm = InstructorLLM(
+    client=_async_instructor,
     model=settings.evaluation.evaluator_model,
     provider="google",
-    client=_gemini_client,
 )
 _evaluator_embeddings = embedding_factory(
     provider="google",
@@ -179,7 +187,7 @@ def _save_snapshot(experiment_name: str, results) -> str:
 
 def run_evaluation(experiment_name: str) -> None:
     """Run RAGAS evaluation on the fixed eval set and save results."""
-    dataset_name = settings.evaluation.dataset_name
+    dataset_name = "arxiv-rag-eval-test-set"
 
     logger.info(
         "Starting evaluation experiment '%s' against dataset '%s'",
