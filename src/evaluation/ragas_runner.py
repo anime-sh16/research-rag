@@ -14,17 +14,16 @@ Flow:
 import argparse
 import asyncio
 import json
-import instructor
-from ragas.llms.base import InstructorLLM, InstructorModelArgs
 import logging
 import os
 from datetime import datetime
 
+import instructor
 from google import genai
 from langsmith import evaluate
 from langsmith.schemas import Example, Run
 from ragas.embeddings.base import embedding_factory
-from ragas.llms import llm_factory
+from ragas.llms.base import InstructorLLM
 from ragas.metrics.collections import (
     AnswerRelevancy,
     ContextPrecision,
@@ -35,19 +34,22 @@ from ragas.metrics.collections import (
 from src.api.main import run_pipeline
 from src.config.config import settings
 
+# Suppress noisy third-party loggers
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger("src.retrieval").setLevel(logging.WARNING)
+logging.getLogger("src.generation").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
-# Evaluator LLM & Embeddings (Gemini via RAGAS factories)
-# embedding_factory reads GOOGLE_API_KEY from os.environ
 os.environ["GOOGLE_API_KEY"] = settings.google_api_key.get_secret_value()
 
 _gemini_client = genai.Client(api_key=settings.google_api_key.get_secret_value())
-# _evaluator_llm = llm_factory(
-#     model=settings.evaluation.evaluator_model,
-#     provider="google",
-#     client=_gemini_client,
-# )
-_async_instructor = instructor.from_genai(_gemini_client, mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS, use_async=True)
+_async_instructor = instructor.from_genai(
+    _gemini_client,
+    mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS,
+    use_async=True,
+)
 _evaluator_llm = InstructorLLM(
     client=_async_instructor,
     model=settings.evaluation.evaluator_model,
@@ -58,55 +60,52 @@ _evaluator_embeddings = embedding_factory(
     model=settings.db.embedding_model,
 )
 
-# RAGAS metric instances (created once, reused across evaluations)
 _faithfulness = Faithfulness(llm=_evaluator_llm)
 _answer_relevancy = AnswerRelevancy(
-    llm=_evaluator_llm,
-    embeddings=_evaluator_embeddings,
+    llm=_evaluator_llm, embeddings=_evaluator_embeddings
 )
 _context_precision = ContextPrecision(llm=_evaluator_llm)
 _context_recall = ContextRecall(llm=_evaluator_llm)
 
 
-# Target function: called once per dataset row by LangSmith evaluate()
 def target(inputs: dict) -> dict:
     """Run the RAG pipeline and format output for RAGAS evaluation."""
     result = run_pipeline(inputs["question"])
     contexts = [chunk["text"] for chunk in result["sources"] if chunk.get("text")]
-    return {
-        "answer": result["answer"],
-        "contexts": contexts,
-    }
+    return {"answer": result["answer"], "contexts": contexts}
 
 
-# RAGAS evaluator functions (called per-question by LangSmith)
-def _safe_ragas_score(coro) -> float | None:
+def _safe_ragas_score(metric_name: str, coro) -> float | None:
     """Run an async RAGAS scorer, returning None on failure."""
     try:
         result = asyncio.run(coro)
-        return result.value
-    except Exception:
-        logger.exception("RAGAS scoring failed")
+        score = result.value
+        logger.debug("  [PASS] %-22s score=%.4f", metric_name, score)
+        return score
+    except Exception as e:
+        logger.warning("  [FAIL] %-22s error=%s", metric_name, type(e).__name__)
         return None
 
 
 def eval_faithfulness(run: Run, example: Example) -> dict:
     score = _safe_ragas_score(
+        "faithfulness",
         _faithfulness.ascore(
             user_input=example.inputs["question"],
             response=run.outputs["answer"],
             retrieved_contexts=run.outputs["contexts"],
-        )
+        ),
     )
     return {"key": "faithfulness", "score": score}
 
 
 def eval_answer_relevancy(run: Run, example: Example) -> dict:
     score = _safe_ragas_score(
+        "answer_relevancy",
         _answer_relevancy.ascore(
             user_input=example.inputs["question"],
             response=run.outputs["answer"],
-        )
+        ),
     )
     return {"key": "answer_relevancy", "score": score}
 
@@ -114,11 +113,12 @@ def eval_answer_relevancy(run: Run, example: Example) -> dict:
 def eval_context_precision(run: Run, example: Example) -> dict:
     outputs = run.outputs or {}
     score = _safe_ragas_score(
+        "context_precision",
         _context_precision.ascore(
             user_input=example.inputs["question"],
             retrieved_contexts=outputs.get("contexts", []),
             reference=example.outputs["ground_truth"],
-        )
+        ),
     )
     return {"key": "context_precision", "score": score}
 
@@ -126,16 +126,16 @@ def eval_context_precision(run: Run, example: Example) -> dict:
 def eval_context_recall(run: Run, example: Example) -> dict:
     outputs = run.outputs or {}
     score = _safe_ragas_score(
+        "context_recall",
         _context_recall.ascore(
             user_input=example.inputs["question"],
             retrieved_contexts=outputs.get("contexts", []),
             reference=example.outputs["ground_truth"],
-        )
+        ),
     )
     return {"key": "context_recall", "score": score}
 
 
-# Snapshot: save results locally
 def _save_snapshot(experiment_name: str, results) -> str:
     """Extract per-question scores from ExperimentResults and save as JSON."""
     results_dir = settings.evaluation.results_dir
@@ -166,9 +166,10 @@ def _save_snapshot(experiment_name: str, results) -> str:
             }
         )
 
-    aggregate = {}
-    for key, values in metric_scores.items():
-        aggregate[key] = round(sum(values) / len(values), 4) if values else None
+    aggregate = {
+        key: round(sum(vals) / len(vals), 4) if vals else None
+        for key, vals in metric_scores.items()
+    }
 
     snapshot = {
         "experiment": experiment_name,
@@ -187,13 +188,11 @@ def _save_snapshot(experiment_name: str, results) -> str:
 
 def run_evaluation(experiment_name: str) -> None:
     """Run RAGAS evaluation on the fixed eval set and save results."""
-    dataset_name = "arxiv-rag-eval-test-set"
+    dataset_name = settings.evaluation.dataset_name
 
-    logger.info(
-        "Starting evaluation experiment '%s' against dataset '%s'",
-        experiment_name,
-        dataset_name,
-    )
+    logger.info("Experiment : %s", experiment_name)
+    logger.info("Dataset    : %s", dataset_name)
+    logger.info("Model      : %s", settings.evaluation.evaluator_model)
 
     results = evaluate(
         target,
@@ -212,19 +211,22 @@ def run_evaluation(experiment_name: str) -> None:
     )
 
     snapshot_path = _save_snapshot(experiment_name, results)
-
-    logger.info("Evaluation complete. Snapshot saved to %s", snapshot_path)
-    print(f"\nResults saved to {snapshot_path}")
+    logger.info("Snapshot   : %s", snapshot_path)
 
     with open(snapshot_path) as f:
         snapshot = json.load(f)
+
     print("\nAggregate scores:")
     for metric, score in snapshot["aggregate"].items():
-        print(f"  {metric}: {score}")
+        status = f"{score:.4f}" if score is not None else "N/A (all failed)"
+        print(f"  {metric:<22} {status}")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)-8s %(name)s — %(message)s",
+    )
     parser = argparse.ArgumentParser(
         description="Run RAGAS evaluation on the fixed eval set."
     )
