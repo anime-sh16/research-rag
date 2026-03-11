@@ -105,6 +105,10 @@ class Retriever:
                 output_dimensionality=VECTOR_DIM,
             ),
         )
+        if not response.embeddings:
+            raise ValueError(
+                f"Gemini returned empty embeddings for query: {query[:100]!r}"
+            )
         return response.embeddings[0].values
 
     def _get_query_vector(self, query: str) -> list[float]:
@@ -157,11 +161,10 @@ class Retriever:
                     set(c["paper_id"] for c in chunks if c.get("paper_id"))
                 )
 
-                # Log the raw data so you can inspect it in the UI
-                trace_chunks = chunks.copy()
-                # shorten the text in each chunk for the trace
-                for chunk in trace_chunks:
-                    chunk["text"] = chunk["text"][:100]
+                # Log shortened text for the trace without mutating returned chunks
+                trace_chunks = [
+                    {**chunk, "text": (chunk["text"] or "")[:100]} for chunk in chunks
+                ]
 
                 run.add_metadata(
                     {

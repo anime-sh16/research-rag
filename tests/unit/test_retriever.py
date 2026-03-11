@@ -238,3 +238,50 @@ class TestRetrieve:
         chunks = retriever.retrieve("query")
 
         assert len(chunks) == 3
+
+
+# ---------------------------------------------------------------------------
+# TestTracingDoesNotMutateChunks
+# ---------------------------------------------------------------------------
+
+
+class TestTracingDoesNotMutateChunks:
+    """Tracing truncation must not mutate the chunks returned to the caller."""
+
+    def _setup_embed(self, retriever) -> None:
+        fake_embedding = MagicMock()
+        fake_embedding.values = [0.1] * settings.db.embedding_dimension
+        retriever._mock_gemini.models.embed_content.return_value.embeddings = [
+            fake_embedding
+        ]
+
+    def test_returned_chunks_have_full_text_when_tracing_active(
+        self, retriever
+    ) -> None:
+        self._setup_embed(retriever)
+        long_text = "A" * 500
+        point = _fake_qdrant_point(source_text=long_text)
+        retriever._mock_qdrant.query_points.return_value.points = [point]
+
+        mock_run = MagicMock()
+        with patch(
+            "src.retrieval.retriever.get_current_run_tree", return_value=mock_run
+        ):
+            chunks = retriever.retrieve("query")
+
+        assert len(chunks[0]["text"]) == 500
+        assert chunks[0]["text"] == long_text
+
+
+# ---------------------------------------------------------------------------
+# TestEmbedQuery
+# ---------------------------------------------------------------------------
+
+
+class TestEmbedQuery:
+    def test_raises_descriptive_error_on_empty_embeddings(self, retriever) -> None:
+        """Empty embeddings from Gemini should raise ValueError, not IndexError."""
+        retriever._mock_gemini.models.embed_content.return_value.embeddings = []
+
+        with pytest.raises(ValueError, match="empty embeddings"):
+            retriever._embed_query("test query")
