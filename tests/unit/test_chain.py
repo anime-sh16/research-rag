@@ -122,13 +122,13 @@ class TestGenerate:
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert config.system_instruction == SYSTEM_INSTRUCTION
 
-    def test_temperature_is_low(
+    def test_temperature_matches_config_setting(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
         chain.generate("Any question?", sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
-        assert config.temperature == pytest.approx(0.1)
+        assert config.temperature == pytest.approx(settings.generation.temperature)
 
     def test_uses_correct_model(
         self, chain: RAGChain, sample_chunks: list[dict]

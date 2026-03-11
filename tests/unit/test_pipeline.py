@@ -7,10 +7,6 @@ from src.ingestion.arxiv_client import ArxivResult
 from src.ingestion.chunker import ChunkMetaData
 from src.ingestion.pipeline import IngestionRunSummary, TopicIngestionStats
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _make_arxiv_result(
     paper_id: str = "1234",
@@ -48,11 +44,6 @@ def _make_chunk(paper_id: str = "1234", index: int = 0) -> ChunkMetaData:
     )
 
 
-# ---------------------------------------------------------------------------
-# Fixture
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def pipeline():
     """SimpleIngestionPipeline with all external dependencies patched."""
@@ -70,11 +61,6 @@ def pipeline():
         instance._mock_vector_store = MockVectorStore.return_value
 
         yield instance
-
-
-# ---------------------------------------------------------------------------
-# TestFetchPaperSingleTopic
-# ---------------------------------------------------------------------------
 
 
 class TestFetchPaperSingleTopic:
@@ -161,11 +147,6 @@ class TestFetchPaperSingleTopic:
         assert "phys_id" not in pipeline.seen_ids
 
 
-# ---------------------------------------------------------------------------
-# TestChunkSingleTopic
-# ---------------------------------------------------------------------------
-
-
 class TestChunkSingleTopic:
     def test_delegates_to_chunker(self, pipeline) -> None:
         papers = [_make_arxiv_result("aaa")]
@@ -179,11 +160,6 @@ class TestChunkSingleTopic:
         pipeline._mock_chunker.chunk_all_results.return_value = []
         result = pipeline.chunk_single_topic([])
         assert result == []
-
-
-# ---------------------------------------------------------------------------
-# TestProcessSingleTopic
-# ---------------------------------------------------------------------------
 
 
 class TestProcessSingleTopic:
@@ -205,11 +181,6 @@ class TestProcessSingleTopic:
         pipeline._mock_chunker.chunk_all_results.return_value = chunks
         stats, _ = pipeline.process_single_topic("transformers")
         assert stats.chunks == 2
-
-
-# ---------------------------------------------------------------------------
-# TestProcess
-# ---------------------------------------------------------------------------
 
 
 class TestProcess:
@@ -268,9 +239,15 @@ class TestProcess:
         patched_pipeline.process()
         assert call_order == ["ensure", "upsert"]
 
-    def test_save_methods_called_once_each(self, patched_pipeline) -> None:
-        patched_pipeline._mock_arxiv.get_arxiv_results.return_value = []
-        patched_pipeline._mock_chunker.chunk_all_results.return_value = []
+    def test_save_methods_called_with_correct_data(self, patched_pipeline) -> None:
+        papers = [_make_arxiv_result("aaa")]
+        chunks = [_make_chunk("aaa")]
+        patched_pipeline._mock_arxiv.get_arxiv_results.return_value = papers
+        patched_pipeline._mock_chunker.chunk_all_results.return_value = chunks
         patched_pipeline.process()
-        patched_pipeline.save_chunks_to_jsonl.assert_called_once()
-        patched_pipeline.save_summary_to_json.assert_called_once()
+        chunks_call_args = patched_pipeline.save_chunks_to_jsonl.call_args
+        assert chunks_call_args.args[0] == chunks
+        summary_call_args = patched_pipeline.save_summary_to_json.call_args
+        from src.ingestion.pipeline import IngestionRunSummary
+
+        assert isinstance(summary_call_args.args[0], IngestionRunSummary)

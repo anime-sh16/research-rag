@@ -5,10 +5,6 @@ import pytest
 
 from src.config.config import settings
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _fake_qdrant_point(
     score: float = 0.9,
@@ -28,11 +24,6 @@ def _fake_qdrant_point(
         "source_text": source_text,
     }
     return point
-
-
-# ---------------------------------------------------------------------------
-# Fixture
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -56,11 +47,6 @@ def retriever(tmp_path):
         instance._mock_qdrant = MockQdrant.return_value
         instance._mock_gemini = mock_gemini
         yield instance
-
-
-# ---------------------------------------------------------------------------
-# TestLoadCache
-# ---------------------------------------------------------------------------
 
 
 class TestLoadCache:
@@ -117,11 +103,6 @@ class TestLoadCache:
         assert r._cache == {}
 
 
-# ---------------------------------------------------------------------------
-# TestGetQueryVector
-# ---------------------------------------------------------------------------
-
-
 class TestGetQueryVector:
     def test_cache_hit_skips_embed_call(self, retriever) -> None:
         import hashlib
@@ -152,8 +133,9 @@ class TestGetQueryVector:
 
         query = "brand new query"
         query_hash = hashlib.md5(query.encode()).hexdigest()
+        expected_vector = [0.2] * settings.db.embedding_dimension
         fake_embedding = MagicMock()
-        fake_embedding.values = [0.2] * settings.db.embedding_dimension
+        fake_embedding.values = expected_vector
         retriever._mock_gemini.models.embed_content.return_value.embeddings = [
             fake_embedding
         ]
@@ -161,11 +143,7 @@ class TestGetQueryVector:
         retriever._get_query_vector(query)
 
         assert query_hash in retriever._cache
-
-
-# ---------------------------------------------------------------------------
-# TestRetrieve
-# ---------------------------------------------------------------------------
+        assert retriever._cache[query_hash] == expected_vector
 
 
 class TestRetrieve:
@@ -240,11 +218,6 @@ class TestRetrieve:
         assert len(chunks) == 3
 
 
-# ---------------------------------------------------------------------------
-# TestTracingDoesNotMutateChunks
-# ---------------------------------------------------------------------------
-
-
 class TestTracingDoesNotMutateChunks:
     """Tracing truncation must not mutate the chunks returned to the caller."""
 
@@ -271,11 +244,6 @@ class TestTracingDoesNotMutateChunks:
 
         assert len(chunks[0]["text"]) == 500
         assert chunks[0]["text"] == long_text
-
-
-# ---------------------------------------------------------------------------
-# TestEmbedQuery
-# ---------------------------------------------------------------------------
 
 
 class TestEmbedQuery:

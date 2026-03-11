@@ -84,11 +84,25 @@ class TestChunkResult:
         assert chunk.published == datetime(2022, 1, 1)
         assert chunk.comment == "This is a test comment"
 
-    def test_topic_propagates_to_chunk(
-        self, chunker: BasicChunker, full_arxiv_result: ArxivResult
+    def test_empty_string_topic_propagates_to_chunk(
+        self, chunker: BasicChunker
     ) -> None:
-        chunk = chunker.chunk_result(full_arxiv_result)[0]
-        assert chunk.topic == full_arxiv_result.topic
+        """Empty string topic is distinct from None and must not be coerced."""
+        result = ArxivResult(
+            entry_id="1234",
+            title="Test Paper 1",
+            topic="",
+            published=datetime(2022, 1, 1),
+            summary="This is a test summary",
+            authors=["John Doe"],
+            comment=None,
+            primary_category="cs.RO",
+            categories=["cs.RO"],
+            pdf_url=None,
+            full_text=None,
+        )
+        chunk = chunker.chunk_result(result)[0]
+        assert chunk.topic == ""
 
     def test_none_topic_propagates_to_chunk(
         self, chunker: BasicChunker, sparse_arxiv_result: ArxivResult
