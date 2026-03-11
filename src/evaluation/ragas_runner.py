@@ -156,12 +156,18 @@ def _save_snapshot(experiment_name: str, results) -> str:
                 q_scores[eval_result.key] = eval_result.score
                 metric_scores[eval_result.key].append(eval_result.score)
 
+        run = row.get("run")
+        run_outputs = (run.outputs or {}) if run else {}
+        example_outputs = row["example"].outputs or {}
+
         per_question.append(
             {
                 "id": row["example"].metadata.get("id", "unknown"),
                 "question": row["example"].inputs["question"],
                 "question_type": row["example"].metadata.get("question_type"),
                 "question_subtype": row["example"].metadata.get("question_subtype"),
+                "answer": run_outputs.get("answer"),
+                "reference": example_outputs.get("ground_truth"),
                 "scores": q_scores,
             }
         )

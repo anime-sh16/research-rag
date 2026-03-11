@@ -165,9 +165,15 @@ class TestUploadDataset:
 class TestSaveSnapshot:
     """_save_snapshot is a pure I/O function — no LLM required."""
 
-    def _make_results_rows(self, scores: dict, example=None) -> list[dict]:
+    def _make_results_rows(
+        self,
+        scores: dict,
+        example=None,
+        answer: str = "Generated answer.",
+        ground_truth: str = "GT",
+    ) -> list[dict]:
         """Build a minimal fake ExperimentResults iterable."""
-        example = example or _make_fake_example()
+        example = example or _make_fake_example(ground_truth=ground_truth)
         eval_results = []
         for key, score in scores.items():
             r = MagicMock()
@@ -175,9 +181,12 @@ class TestSaveSnapshot:
             r.score = score
             eval_results.append(r)
 
+        run = _make_fake_run(answer=answer)
+
         return [
             {
                 "example": example,
+                "run": run,
                 "evaluation_results": {"results": eval_results},
             }
         ]
@@ -237,6 +246,7 @@ class TestSaveSnapshot:
         row = [
             {
                 "example": _make_fake_example(),
+                "run": _make_fake_run(),
                 "evaluation_results": {"results": [r]},
             }
         ]
@@ -269,6 +279,71 @@ class TestSaveSnapshot:
         with open(tmp_path / "count-test.json") as f:
             data = json.load(f)
         assert len(data["per_question"]) == 2
+
+    def test_per_question_contains_answer_from_run(self, tmp_path) -> None:
+        rows = self._make_results_rows(
+            {"faithfulness": 0.9}, answer="The transformer uses self-attention."
+        )
+
+        with patch("src.evaluation.ragas_runner.settings") as mock_settings:
+            mock_settings.evaluation.results_dir = tmp_path
+            mock_settings.pipeline_version = "v1-baseline"
+
+            from src.evaluation.ragas_runner import _save_snapshot
+
+            _save_snapshot("answer-test", rows)
+
+        with open(tmp_path / "answer-test.json") as f:
+            data = json.load(f)
+        assert (
+            data["per_question"][0]["answer"] == "The transformer uses self-attention."
+        )
+
+    def test_per_question_contains_reference_from_ground_truth(self, tmp_path) -> None:
+        rows = self._make_results_rows(
+            {"faithfulness": 0.9},
+            ground_truth="Attention is a mechanism in transformers.",
+        )
+
+        with patch("src.evaluation.ragas_runner.settings") as mock_settings:
+            mock_settings.evaluation.results_dir = tmp_path
+            mock_settings.pipeline_version = "v1-baseline"
+
+            from src.evaluation.ragas_runner import _save_snapshot
+
+            _save_snapshot("ref-test", rows)
+
+        with open(tmp_path / "ref-test.json") as f:
+            data = json.load(f)
+        assert (
+            data["per_question"][0]["reference"]
+            == "Attention is a mechanism in transformers."
+        )
+
+    def test_per_question_answer_is_none_when_run_missing(self, tmp_path) -> None:
+        """Row without a 'run' key (e.g. pipeline failure) must not raise."""
+        r = MagicMock()
+        r.key = "faithfulness"
+        r.score = 0.5
+        row = [
+            {
+                "example": _make_fake_example(),
+                "evaluation_results": {"results": [r]},
+                # no "run" key — simulates a failed pipeline execution
+            }
+        ]
+
+        with patch("src.evaluation.ragas_runner.settings") as mock_settings:
+            mock_settings.evaluation.results_dir = tmp_path
+            mock_settings.pipeline_version = "v1-baseline"
+
+            from src.evaluation.ragas_runner import _save_snapshot
+
+            _save_snapshot("no-run-test", row)
+
+        with open(tmp_path / "no-run-test.json") as f:
+            data = json.load(f)
+        assert data["per_question"][0]["answer"] is None
 
 
 class TestTarget:
