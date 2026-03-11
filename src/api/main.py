@@ -48,9 +48,7 @@ class QueryResponse(BaseModel):
 @traceable(
     run_type="chain",
     tags=[
-        "pipeline_version:v1-baseline",
-        "query_type:general",
-        "environment:development",
+        f"pipeline_version:{settings.pipeline_version}",
         "retrieval_method:dense",
     ],
 )
@@ -59,7 +57,7 @@ def run_pipeline(question: str) -> dict:
     run = get_current_run_tree()
 
     if run:
-        run.name = f"query|general|v1-baseline|{datetime.now().strftime('%m%d_%H%M%S')}"
+        run.name = f"query|{settings.pipeline_version}|{datetime.now().strftime('%m%d_%H%M%S')}"
 
     chunks = retriever.retrieve(question)
 

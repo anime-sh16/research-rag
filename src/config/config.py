@@ -61,6 +61,13 @@ class APIConfig(BaseModel):
     title: str = "ArXiv RAG API"
 
 
+class EvaluationConfig(BaseModel):
+    dataset_name: str = "arxiv-rag-eval-set"
+    evalset_path: Path = Path("evaluation/evalset.json")
+    results_dir: Path = Path("evaluation/results")
+    evaluator_model: str = "gemini-2.5-flash-lite"
+
+
 class Settings(BaseSettings):
     # Secrets — required, loaded from .env; SecretStr prevents accidental logging
     google_api_key: SecretStr
@@ -72,12 +79,16 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr
     langsmith_project: str
 
+    # Cross-cutting — used in tracing tags, evaluation snapshots, experiment metadata
+    pipeline_version: str = "v1-baseline"
+
     # App config groups — have defaults, overridable via env (e.g. DB__COLLECTION_NAME=foo)
     data: DataConfig = DataConfig()
     db: DBConfig = DBConfig()
     ingestion: IngestionConfig = IngestionConfig()
     generation: GenerationConfig = GenerationConfig()
     api: APIConfig = APIConfig()
+    evaluation: EvaluationConfig = EvaluationConfig()
 
     model_config = {
         "env_file": ".env",

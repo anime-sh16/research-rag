@@ -3,21 +3,20 @@
 # Just documentaion. Update in the code as well in case of changes.
 
 tracing_conventions:
-  # The format for root span names (e.g., query|general|v1-baseline|0312)
-  run_name_template: "query|{query_type}|{pipeline_version}|{date_time}"
+  # The format for root span names (e.g., query|v1-baseline|0312)
+  run_name_template: "query|{pipeline_version}|{date_time}"
 
 allowed_tags:
   pipeline_versions:
     - "v1-baseline"
+  # query_type tags are set during evaluation runs from evalset metadata.
+  # Operational traces omit query_type until classification is implemented.
   query_types:
-    - "general"
     - "factual"
-    - "comparative"
     - "conceptual"
-  environments:
-    - "development"
-    - "production"
-    - "evaluation"
+    - "multi-hop"
+    - "numerical"
+    - "cross-paper"
   retrieval_methods:
     - "dense"
 
