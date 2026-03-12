@@ -177,13 +177,50 @@ The eval set is **fixed and immutable** — all experiments run against the same
 | Context Precision | **0.6818** |
 | Context Recall | **0.8415** |
 
-**Key observations:**
-- High faithfulness (0.87) — the model stays grounded in what it retrieves
-- Context precision (0.68) is the primary bottleneck — dense search retrieves high-scoring chunks that aren't always relevant to the ground truth
-- Weakest questions: multi-hop cross-paper queries and numerical formula lookups
-- Strongest questions: direct factual lookups and method-detail questions
+![RAGAS Metrics Overview](images/v1-baseline/scalar_metrics_bar_chart.png)
 
-Full per-question breakdown: `evaluation/results/v1-baseline.json`
+### Key Observations
+- **Faithfulness is strong (0.87)** — the model stays grounded in retrieved context. When it has the right chunks, it produces correct answers. When it lacks context, it refuses to hallucinate and says "I don't have enough information" — which is the correct generation behavior.
+- **Context Precision (0.68) is the weakest metric** — even when the correct source is retrieved, relevant chunks are often buried at positions 3–5 instead of 1–2. Dense search alone cannot rank effectively.
+- **Retrieval similarity scores cluster tightly around 0.7** with score spreads as low as 0.008–0.05 across retrieved chunks. The retriever cannot distinguish "highly relevant" from "somewhat relevant."
+- **~8 questions produce "I don't know" responses** — every one of these is a retrieval failure, not a generation failure. The model is correctly refusing when given insufficient context.
+- **Source concentration kills cross-paper questions** — with no diversity mechanism, top-5 by cosine similarity naturally locks onto one paper's embedding cluster. Survey papers on related topics (RAG, RLHF) dominate retrieval over the specific target papers.
+
+### Performance by Question Type
+
+![RAGAS Metrics by Question Type](images/v1-baseline/rag_metrics_comparison.png)
+
+| Type | Result | Details |
+|---|---|---|
+| **Factual** | Strong | Most samples perform well. 2 samples show low context precision despite retrieving the correct source — a ranking problem. |
+| **Conceptual** | Strong | All samples score high. 1 edge case where a wrong-source chunk caused the model to decline answering, despite the retrieved context containing enough information. |
+| **Cross-paper** | Catastrophic failure | 5/6 samples produce "I don't have enough information." Retrieval locks onto a single source (spread_diversity=1–2 in most cases) and cannot surface chunks from the second required paper. Survey papers on related topics crowd out the actual target papers. |
+| **Multi-hop** | Mixed | 4/6 good results, all 6 highly faithful. However, 4/6 incorrectly retrieve from multiple sources when all multi-hop questions are single-source — indicating the retriever drifts to semantically similar but wrong papers. |
+| **Numerical** | Weak | Tabular data destroyed during PDF extraction and chunking. Answers that exist only in tables are invisible to the retriever. 2/5 decent results only when the answer appears in running text. |
+
+### Root Causes Identified
+
+1. **No lexical retrieval signal** — dense-only search has no way to match specific paper names, method names, or technical terms exactly. When a cross-paper question mentions "AWQ" and "Quasar-ViT," the dense embedding lands between the two concepts (eg. quantization) and retrieves whichever cluster is closer, missing the other entirely.
+
+2. **Poor chunk ranking** — even when correct chunks are retrieved, they are not ranked at the top. Context Precision suffers because the retriever treats all ~0.7-scoring chunks as equally relevant.
+
+3. **Fixed-length chunking** — splits content without awareness of document structure, breaking tables, logical sections, and cross-sentence arguments. Chunks lack context about which paper section they belong to.
+
+4. **Tabular data loss** — PDF text extraction strips table formatting. Numerical answers embedded in tables become fragmented text that neither embeds nor retrieves well.
+
+5. **Source concentration without diversity** — top-k by cosine similarity has no mechanism to enforce source diversity. A paper with 20 chunks will dominate over a paper with 5 chunks even when both are needed.
+
+### Possible Solutions
+
+| Root Cause | Possible Approach |
+|---|---|
+| No lexical signal | **Hybrid search** — combine dense vectors with BM25 sparse retrieval (Qdrant native) via Reciprocal Rank Fusion. BM25 matches exact terms, recovering papers that dense search misses. |
+| Poor chunk ranking | **Cross-encoder reranking** — over-retrieve (top-20), then rerank with Cohere Rerank to push truly relevant chunks to top-5. Cross-encoders read query and chunk jointly, far more accurate than bi-encoder similarity. |
+| Fixed-length chunking | **Semantic chunking** with contextual headers — split on topic boundaries rather than token count; prepend paper title and section name to each chunk for retrieval context. |
+| Tabular data loss | **Table-aware PDF extraction** — use a parser that preserves table structure as markdown during ingestion. |
+| Source concentration | **Diversity-aware retrieval** — hybrid search + RRF naturally diversifies results. If insufficient, apply MMR or post-retrieval source balancing. |
+
+Full per-question breakdown: [v1-baseline.json](evaluation/results/v1-baseline.json) | Detailed analysis: [v1-baseline-analysis.md](evaluation/results/v1-baseline-analysis.md)
 
 ---
 
