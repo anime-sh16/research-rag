@@ -252,11 +252,7 @@ class SimpleIngestionPipeline:
 
             for pdf_path in pdf_files:
                 # Use parent directory name as topic (e.g., data/pdfs/LLM/paper.pdf → "LLM")
-                topic = (
-                    pdf_path.parent.name
-                    if pdf_path.parent != pdf_dir
-                    else "local"
-                )
+                topic = pdf_path.parent.name if pdf_path.parent != pdf_dir else "local"
                 full_text = ArxivClient.extract_text_from_pdf(pdf_path)
                 if not full_text:
                     logger.warning("Skipping %s — no text extracted.", pdf_path.name)
@@ -285,9 +281,7 @@ class SimpleIngestionPipeline:
             logger.info("Total chunks from PDFs: %d.", len(all_chunks))
 
             vector_store = VectorStore()
-            vector_store.ensure_collection(
-                collection_name=settings.db.collection_name
-            )
+            vector_store.ensure_collection(collection_name=settings.db.collection_name)
             vector_store.upsert_chunks(all_chunks)
 
             # Build per-topic stats
@@ -328,9 +322,7 @@ class SimpleIngestionPipeline:
                 summary_file,
             )
 
-            logger.info(
-                "PDF ingestion complete. %d chunks upserted.", len(all_chunks)
-            )
+            logger.info("PDF ingestion complete. %d chunks upserted.", len(all_chunks))
             return run_summary
 
         finally:
