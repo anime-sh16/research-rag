@@ -7,7 +7,7 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 from langsmith import wrappers
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 from qdrant_client.models import Distance, PointStruct, VectorParams
 from tenacity import (
     before_sleep_log,
@@ -98,9 +98,16 @@ class VectorStore:
         if not self.qdrant_client.collection_exists(collection_name):
             self.qdrant_client.create_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(
-                    size=embedding_dimension, distance=Distance.COSINE
-                ),
+                vectors_config={
+                    settings.db.dense_name: VectorParams(
+                        size=embedding_dimension, distance=Distance.COSINE
+                    ),
+                },
+                sparse_vectors_config={
+                    settings.db.sparse_name: models.SparseVectorParams(
+                        modifier=models.Modifier.IDF
+                    )
+                },
             )
             logger.info("Collection %s created.", collection_name)
         else:
@@ -153,15 +160,20 @@ class VectorStore:
                 batch_start + len(batch),
                 total,
             )
-            embeddings = self._embed_text(texts)
+            dense_embeddings = self._embed_text(texts)
 
             points = [
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
-                    vector=emb_vector,
+                    vector={
+                        settings.db.dense_name: dense_emb_vector,
+                        settings.db.sparse_name: models.Document(
+                            text=chunk.source_text, model=settings.db.sparse_model
+                        ),
+                    },
                     payload=chunk.model_dump(mode="json"),
                 )
-                for chunk, emb_vector in zip(batch, embeddings)
+                for chunk, dense_emb_vector in zip(batch, dense_embeddings)
             ]
 
             self.qdrant_client.upsert(collection_name=collection_name, points=points)

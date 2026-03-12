@@ -3,12 +3,14 @@ import json
 import logging
 from pathlib import Path
 
+import requests
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 from langsmith import Client, traceable, wrappers
 from langsmith.run_helpers import get_current_run_tree
 from qdrant_client import QdrantClient
+from qdrant_client.models import Document, Fusion, FusionQuery, Prefetch
 from tenacity import (
     before_sleep_log,
     retry,
@@ -31,6 +33,7 @@ def _is_rate_limit_error(exc: BaseException) -> bool:
 COLLECTION_NAME = settings.db.collection_name
 VECTOR_DIM = settings.db.embedding_dimension
 QUERY_CACHE_FILE = settings.data.temp_dir / settings.data.query_cache_file
+_JINA_RERANK_URL = settings.jina_rerank_url
 
 
 class Retriever:
@@ -51,6 +54,11 @@ class Retriever:
         )
         self.langsmith_client = Client()
         self.top_k = top_k
+        self.prefetch_k = settings.retrieval.hybrid_prefetch_k
+        self._jina_headers = {
+            "Authorization": f"Bearer {settings.jina_api_key.get_secret_value()}",
+            "Content-Type": "application/json",
+        }
         self._cache = self._load_cache()
 
     def _load_cache(self) -> dict[str, list[float]]:
@@ -125,20 +133,55 @@ class Retriever:
         self._save_to_cache(query, query_hash, embedding)
         return embedding
 
-    @traceable(run_type="retriever", name="retrieval/dense_search")
+    def _rerank(self, query: str, candidates: list[dict]) -> list[dict]:
+        """Rerank candidates using Jina Reranker API, return top_k sorted by relevance."""
+        if not candidates:
+            return candidates
+
+        response = requests.post(
+            _JINA_RERANK_URL,
+            headers=self._jina_headers,
+            data={
+                "model": settings.retrieval.jina_rerank_model,
+                "query": query,
+                "documents": [c["text"] for c in candidates],
+                "top_n": self.top_k,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+
+        return [
+            {**candidates[r["index"]], "score": r["relevance_score"]}
+            for r in response.json()["results"]
+        ]
+
+    @traceable(run_type="retriever", name="retrieval/hybrid_search")
     def retrieve(self, query: str) -> list[dict]:
         logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
         query_vector = self._get_query_vector(query)
 
-        # query_points is the current API — .search() is removed in latest client
+        # Hybrid search: dense + BM25 sparse with server-side RRF fusion
         results = self.qdrant_client.query_points(
             collection_name=COLLECTION_NAME,
-            query=query_vector,  # list[float] → dense nearest neighbour search
-            limit=self.top_k,
+            prefetch=[
+                Prefetch(
+                    query=query_vector,
+                    using=settings.db.dense_name,
+                    limit=self.prefetch_k,
+                ),
+                Prefetch(
+                    query=Document(text=query, model=settings.db.sparse_model),
+                    using=settings.db.sparse_name,
+                    limit=self.prefetch_k,
+                ),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
+            limit=self.prefetch_k,
             with_payload=True,
-        ).points  # returns QueryResponse, .points is the list
+        ).points
 
-        chunks = [
+        candidates = [
             {
                 "score": result.score,
                 "text": result.payload.get("source_text"),
@@ -150,6 +193,8 @@ class Retriever:
             for result in results
         ]
 
+        chunks = self._rerank(query, candidates)
+
         # LangSmith Tracing & Proxy Metrics
         run = get_current_run_tree()
         if run:
@@ -160,8 +205,10 @@ class Retriever:
                 unique_papers = len(
                     set(c["paper_id"] for c in chunks if c.get("paper_id"))
                 )
+                candidate_papers = len(
+                    set(c["paper_id"] for c in candidates if c.get("paper_id"))
+                )
 
-                # Log shortened text for the trace without mutating returned chunks
                 trace_chunks = [
                     {**chunk, "text": (chunk["text"] or "")[:100]} for chunk in chunks
                 ]
@@ -170,10 +217,11 @@ class Retriever:
                     {
                         "chunks_returned": trace_chunks,
                         "top_k_requested": self.top_k,
+                        "prefetch_k": self.prefetch_k,
+                        "candidate_papers_before_rerank": candidate_papers,
                     }
                 )
 
-                # Log proxy metrics to LangSmith
                 self.langsmith_client.create_feedback(
                     run_id=run.id,
                     key="retrieval_avg_score",
@@ -192,9 +240,15 @@ class Retriever:
                     score=unique_papers,
                     trace_id=run.trace_id,
                 )
+                self.langsmith_client.create_feedback(
+                    run_id=run.id,
+                    key="rerank_score_spread",
+                    score=max(scores) - min(scores),
+                    trace_id=run.trace_id,
+                )
 
         logger.info(
-            "Retrieved %d chunks (scores: %s).",
+            "Retrieved %d chunks after rerank (scores: %s).",
             len(chunks),
             [round(c["score"], 3) for c in chunks],
         )

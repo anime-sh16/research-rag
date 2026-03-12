@@ -14,7 +14,10 @@ class DataConfig(BaseModel):
 
 
 class DBConfig(BaseModel):
-    collection_name: str = "arxiv_paper_v0.5"
+    collection_name: str = "arxiv_paper_v1_hybrid"
+    dense_name: str = "dense"
+    sparse_name: str = "sparse"
+    sparse_model: str = "Qdrant/bm25"
     embedding_dimension: int = 768
     full_embedding_dimension: int = 3072  # gemini-embedding-001 defaults to 3072. process teh normalization automatically
     embedding_model: str = "gemini-embedding-001"
@@ -61,6 +64,12 @@ class APIConfig(BaseModel):
     title: str = "ArXiv RAG API"
 
 
+class RetrievalConfig(BaseModel):
+    hybrid_prefetch_k: int = 20
+    rerank_top_n: int = 5
+    jina_rerank_model: str = "jina-reranker-v2-base-multilingual"
+
+
 class EvaluationConfig(BaseModel):
     dataset_name: str = "arxiv-rag-eval-set"
     evalset_path: Path = Path("evaluation/evalset.json")
@@ -73,7 +82,9 @@ class Settings(BaseSettings):
     google_api_key: SecretStr
     qdrant_url: str
     qdrant_api_key: SecretStr
-    cohere_api_key: SecretStr
+    jina_api_key: SecretStr
+    jina_rerank_url: str = "https://api.jina.ai/v1/rerank"
+
     langsmith_tracing: str = "false"
     langsmith_endpoint: str = "https://api.smith.langchain.com"
     langsmith_api_key: SecretStr
@@ -89,6 +100,7 @@ class Settings(BaseSettings):
     generation: GenerationConfig = GenerationConfig()
     api: APIConfig = APIConfig()
     evaluation: EvaluationConfig = EvaluationConfig()
+    retrieval: RetrievalConfig = RetrievalConfig()
 
     model_config = {
         "env_file": ".env",
