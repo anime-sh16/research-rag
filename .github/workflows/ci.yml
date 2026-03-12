@@ -35,3 +35,10 @@ jobs:
 
     - name: Run tests with pytest
       run: uv run pytest tests/ -v
+
+  check-success:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm CI Passed
+        run: echo "All tests and linting passed!"
