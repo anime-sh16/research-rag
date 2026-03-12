@@ -1,0 +1,505 @@
+{
+  "experiment": "v1-baseline",
+  "timestamp": "2026-03-11T21:53:58.422594",
+  "pipeline_version": "v1-baseline",
+  "aggregate": {
+    "faithfulness": 0.8742,
+    "answer_relevancy": 0.7509,
+    "context_precision": 0.6818,
+    "context_recall": 0.8415
+  },
+  "per_question": [
+    {
+      "id": "q_041",
+      "question": "In the communication analysis of the Cascade multi-party inference protocol, what is the exact theoretical formula used to calculate the total single-layer communication byte overhead, denoted as CommBytes?",
+      "question_type": "numerical",
+      "question_subtype": "formula",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8966327710279359,
+        "context_precision": 0.49999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_040",
+      "question": "In the heterogeneous multi-agent self-attention (HMSA) module of the V2X-ViT model, what is the exact mathematical formula used to compute the message representation from a neighboring agent, denoted as headmMSG (i, j)?",
+      "question_type": "numerical",
+      "question_subtype": "formula",
+      "scores": {
+        "faithfulness": 0.8333333333333334,
+        "answer_relevancy": 0.824625410263461,
+        "context_precision": 0.19999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_039",
+      "question": "During the scalability testing for the Cascade protocol configured with \u03b1 = 2 and no m-splitting, what is the mean runtime in seconds for a single 128-token prompt forward pass on the Llama-2-13B model?",
+      "question_type": "numerical",
+      "question_subtype": "throughput",
+      "scores": {
+        "faithfulness": 0.6666666666666666,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "id": "q_038",
+      "question": "In the zero-shot evaluation for Arabic tasks, what is the exact average score achieved by the instruction-tuned Jais-chat (6.7B) model?",
+      "question_type": "numerical",
+      "question_subtype": "benchmark-result",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9942891313595771,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_037",
+      "question": "What is the exact inference time measured on a GPU Tesla V100 for the V2X-ViTS model?",
+      "question_type": "numerical",
+      "question_subtype": "throughput",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.6196549857473094,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_036",
+      "question": "What specific problem arises when aggregating multiple LLM outputs at the token level, and why is this fine-grained approach still considered more effective than response-level ensemble methods?",
+      "question_type": "multi-hop",
+      "question_subtype": "taxonomy-to-limitation",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8902228267809656,
+        "context_precision": 0.8333333332916666,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_035",
+      "question": "How does the plan generation approach of the LLM-profiled planner in a base workflow fundamentally differ from search workflows, and what specific type of task does this base workflow approach struggle to handle?",
+      "question_type": "multi-hop",
+      "question_subtype": "taxonomy-to-limitation",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.7690259325453184,
+        "context_precision": 0.8055555555287036,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_034",
+      "question": "How does the fundamental Markov chain process of Diffusion Probabilistic Models operate in both directions, and what specific objective metric is recommended for evaluating the fidelity of the videos they might generate?",
+      "question_type": "multi-hop",
+      "question_subtype": "architecture-to-evaluation",
+      "scores": {
+        "faithfulness": 0.9285714285714286,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_033",
+      "question": "How is the internal reward for appraisal-based reward modifications mathematically formulated in RL agents, and what was the primary empirical result of Sequeira et al.'s implementation of this concept in a resource-predator task?",
+      "question_type": "multi-hop",
+      "question_subtype": "method-to-result",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.9999999999666667,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_032",
+      "question": "In what way do heavy-tailed data distributions alter the general consensus that quantization is superior to pruning, and how do systems designed for low-bit quantization attempt to resolve this vulnerability?",
+      "question_type": "cross-paper",
+      "question_subtype": "field-intersection",
+      "scores": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.8333333332916666,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_031",
+      "question": "What specific type of hallucination remains a significant error bottleneck in RAG pipelines even when correct documents are successfully retrieved, and how does this align with the broader categorization of generative errors?",
+      "question_type": "cross-paper",
+      "question_subtype": "field-intersection",
+      "scores": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.19999999998,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "id": "q_030",
+      "question": "How does the mechanism used by Self-RAG to evaluate the necessity of invoking a retrieval tool differ from how CATP-LLM assesses the utility of appending an external tool to its execution plan?",
+      "question_type": "cross-paper",
+      "question_subtype": "method-contrast",
+      "scores": {
+        "faithfulness": 0.8,
+        "answer_relevancy": 0.8180477876607606,
+        "context_precision": 0.0,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_029",
+      "question": "Why does AWQ intentionally leave activations unquantized during inference, and how does this contrast with Quasar-ViT's treatment of activations for FPGA acceleration?",
+      "question_type": "cross-paper",
+      "question_subtype": "tradeoff-comparison",
+      "scores": {
+        "faithfulness": 0.8,
+        "answer_relevancy": 0.8130737208889128,
+        "context_precision": 0.0,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_028",
+      "question": "How do AWQ and Quasar-ViT differently avoid the hardware inefficiency typically associated with executing mixed-precision quantization across different neural network channels?",
+      "question_type": "cross-paper",
+      "question_subtype": "method-contrast",
+      "scores": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.7422217039439755,
+        "context_precision": 0.0,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_027",
+      "question": "Why do standard alignment pipelines for language models typically require an initial supervised fine-tuning phase, and what specific limitation of SFT does the subsequent reinforcement learning from human feedback phase aim to resolve?",
+      "question_type": "cross-paper",
+      "question_subtype": "method-contrast",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.7682398311775015,
+        "context_precision": 0.8055555555287036,
+        "context_recall": 0.6666666666666666
+      }
+    },
+    {
+      "id": "q_026",
+      "question": "Why do Retrieval-Augmented Generation architectures inherently expand the trust and safety vulnerability surface compared to monolithic large language models, and what new failure modes emerge across the extended pipeline?",
+      "question_type": "multi-hop",
+      "question_subtype": "taxonomy-to-limitation",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8181819646638337,
+        "context_precision": 0.999999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_025",
+      "question": "What is the rationale behind decoupling reward modeling from policy training in traditional RLHF, and what inherent challenges does this separation introduce during the policy optimization phase?",
+      "question_type": "multi-hop",
+      "question_subtype": "design-rationale-to-limitation",
+      "scores": {
+        "faithfulness": 0.9166666666666666,
+        "answer_relevancy": 0.9474339389203882,
+        "context_precision": 0.9166666666361111,
+        "context_recall": 0.8333333333333334
+      }
+    },
+    {
+      "id": "q_024",
+      "question": "Contrast canonical and agentic RAG architectures in terms of their retrieval coordination and adaptivity, and explain the deployment tradeoffs associated with moving from static pipelines to autonomous orchestration.",
+      "question_type": "conceptual",
+      "question_subtype": "tradeoff",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9346695611274178,
+        "context_precision": 0.94999999997625,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_023",
+      "question": "How do assignment-based guidance approaches overcome the core limitations of classifier guidance and classifier-free guidance in conditional image generation?",
+      "question_type": "conceptual",
+      "question_subtype": "comparison",
+      "scores": {
+        "faithfulness": 0.8571428571428571,
+        "answer_relevancy": 0.9413272978362532,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_022",
+      "question": "Analyze the tradeoffs between using pairwise comparisons versus unary critiques for human preference elicitation in reward learning.",
+      "question_type": "conceptual",
+      "question_subtype": "tradeoff",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.905784510199251,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_021",
+      "question": "Explain the superficial alignment hypothesis in the context of instruction tuning and how empirical evidence from simplified task definitions supports this critique of supervised fine-tuning.",
+      "question_type": "conceptual",
+      "question_subtype": "limitation",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8978288364325352,
+        "context_precision": 0.999999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_020",
+      "question": "Compare the methodologies and underlying risks of constructing synthetic instruction datasets via distillation versus self-improvement.",
+      "question_type": "conceptual",
+      "question_subtype": "comparison",
+      "scores": {
+        "faithfulness": 0.9565217391304348,
+        "answer_relevancy": 0.8637027127423478,
+        "context_precision": 0.7499999999625,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_019",
+      "question": "What was the total computation time per query for the FAISS HNSW with Webis set-encoder-large reranker compared to the MS Marco cross-encoder pipeline?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.987194339139943,
+        "context_precision": 0.7499999999625,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_018",
+      "question": "What percentages of math-related data were found in the ShareGPT and Alpaca datasets during the WizardLM ablation study on GSM8k performance?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9787738522565853,
+        "context_precision": 0.49999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_017",
+      "question": "What are the five prompt operations used by WizardLM's Evol-Instruct method during In-Depth Evolving?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9756732545314594,
+        "context_precision": 0.8333333332916666,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_016",
+      "question": "By what percentage did RePaint's resampling strategy reduce the LPIPS metric on super-resolution masks compared to the SDEdit strategy?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 0.6666666666666666,
+        "answer_relevancy": 0.83198860871386,
+        "context_precision": 0.8333333332916666,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_015",
+      "question": "How does RePaint condition the reverse diffusion process on known pixels without modifying the pretrained DDPM network?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8089820414594263,
+        "context_precision": 0.99999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_014",
+      "question": "In the T2T module of the T2T-ViT architecture, what are the exact patch sizes and overlapping values used for the three sequential soft splits?",
+      "question_type": "factual",
+      "question_subtype": "hyperparameter",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8304095448345069,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_013",
+      "question": "What top-1 accuracy and MACs does T2T-ViT-14 achieve on ImageNet compared to the ViT-S/16 baseline when trained from scratch?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.976564244873614,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_012",
+      "question": "What are the two steps performed in each Tokens-to-Token process to progressively structurize an image into tokens?",
+      "question_type": "factual",
+      "question_subtype": "architecture",
+      "scores": {
+        "faithfulness": 0.6666666666666666,
+        "answer_relevancy": 0.8528930574791661,
+        "context_precision": 0.8874999999778125,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_011",
+      "question": "In the alpha-UMi global-to-local progressive fine-tuning, what learning rate is used in the second stage and how many epochs are the planner, caller, and summarizer each fine-tuned for?",
+      "question_type": "factual",
+      "question_subtype": "hyperparameter",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9857606458573311,
+        "context_precision": 0.3333333333,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_010",
+      "question": "What are the three components that the alpha-UMi framework decomposes a single LLM's capabilities into?",
+      "question_type": "factual",
+      "question_subtype": "architecture",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8609343739851766,
+        "context_precision": 0.999999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_009",
+      "question": "Why were queries with more than 20 ground truth answers excluded from the Amazon STaRK evaluation benchmark?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9999999999999997,
+        "context_precision": 0.499999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_008",
+      "question": "What percentage improvement in Hit@1 did the best neural retriever-reranker pipeline achieve over published baselines for knowledge graph retrieval in e-commerce?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.7177638496953116,
+        "context_precision": 0.19999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_007",
+      "question": "What reward model accuracy did the Alpaca-RRHF model trained with direct preference achieve?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8028350530270915,
+        "context_precision": 0.8333333332916666,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_006",
+      "question": "What two types of loss are combined to calculate the total loss during RRHF optimization?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9227200515747594,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_005",
+      "question": "How does RRHF score sampled responses before aligning them with human preferences?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9434640753376785,
+        "context_precision": 0.4499999999775,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_004",
+      "question": "How much compute savings does the Primer architecture achieve compared to the original T5 architecture in large scale auto-regressive language model training on C4?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9618114916349333,
+        "context_precision": 0.94999999997625,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_003",
+      "question": "What two architectural modifications make up the Primer-EZ model for efficient language modeling?",
+      "question_type": "factual",
+      "question_subtype": "architecture",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9075278206806651,
+        "context_precision": 0.7555555555303703,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_002",
+      "question": "How much does AWQ reduce quantization degradation for the OpenFlamingo-9B visual language model under the INT4-g128 32-shot setting?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9986906322074433,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_001",
+      "question": "What percentage of salient weights needs to be protected to significantly reduce quantization loss in activation-aware weight quantization?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "scores": {
+        "faithfulness": 0.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.3333333333,
+        "context_recall": 0.0
+      }
+    }
+  ]
+}

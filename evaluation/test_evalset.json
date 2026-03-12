@@ -1,0 +1,50 @@
+[
+  {
+    "id": "q_001",
+    "question": "What percentage of salient weights needs to be protected to significantly reduce quantization loss in activation-aware weight quantization?",
+    "ground_truth": "Protecting only 0.1% to 1% of the salient weights can greatly bridge the performance degradation caused by quantization loss.",
+    "source_papers": ["AWQ: Activation-aware Weight Quantization for On-Device LLM Compression and Acceleration"],
+    "question_type": "factual",
+    "question_subtype": "method-detail"
+  },
+  {
+    "id": "q_024",
+    "question": "Contrast canonical and agentic RAG architectures in terms of their retrieval coordination and adaptivity, and explain the deployment tradeoffs associated with moving from static pipelines to autonomous orchestration.",
+    "ground_truth": "Canonical RAG architectures operate on a static, rule-based, and linear pipeline consisting of a strict sequence: user query, single-pass retrieval, context concatenation, and sequence generation. Their static nature offers significant deployment advantages in the form of predictable execution, lower computational overhead, and reduced latency, making them highly suitable for real-time, straightforward Q&A tasks. In contrast, agentic RAG architectures abandon linear pipelines in favor of autonomous orchestration. They utilize AI agents (planners, retrievers, critics) to dynamically coordinate the control flow, allowing the system to perform iterative multi-hop retrievals, evaluate intermediate results, and self-correct based on the reasoning demands of the specific query. The tradeoff for this high adaptivity and enhanced capacity for complex reasoning is a massive increase in system complexity. Deploying agentic RAG introduces substantial challenges, including unpredictable latency spikes due to iterative processing loops, significantly higher token/compute resource consumption, and the necessity for far more sophisticated trust and safety guardrails to monitor autonomous decision-making boundaries.",
+    "source_papers": ["Engineering the RAG Stack: A Comprehensive Review of the Architecture and Trust Frameworks for Retrieval Augmented Generation Systems"],
+    "question_type": "conceptual",
+    "question_subtype": "tradeoff"
+  },
+  {
+    "id": "q_027",
+    "question": "Why do standard alignment pipelines for language models typically require an initial supervised fine-tuning phase, and what specific limitation of SFT does the subsequent reinforcement learning from human feedback phase aim to resolve?",
+    "ground_truth": "According to the Instruction Tuning survey, an initial SFT phase is required because training a reinforcement learning algorithm directly from a raw base model is too difficult, making SFT necessary to establish a capable initial policy. However, the RLHF survey notes that SFT alone is generally insufficient because the limited size and diversity of supervised data often leads to overfitting and poor generalization. The subsequent RLHF phase resolves this limitation by utilizing more diverse preference data to help the model learn a more robust, generalizable objective.",
+    "source_papers": ["Instruction Tuning for Large Language Models: A Survey", "A Survey of Reinforcement Learning from Human Feedback"],
+    "question_type": "cross-paper",
+    "question_subtype": "method-contrast"
+  },
+  {
+    "id": "q_036",
+    "question": "What specific problem arises when aggregating multiple LLM outputs at the token level, and why is this fine-grained approach still considered more effective than response-level ensemble methods?",
+    "ground_truth": "Token-level aggregation faces the dilemma of vocabulary discrepancies across different LLMs, which produce varying embedding lengths and impede the fusion of probability distributions. However, it is still considered more effective than coarse-grained response-level methods because it can harness the distribution information from each individual model directly during the decoding phase.",
+    "source_papers": ["Harnessing Multiple Large Language Models: A Survey on LLM Ensemble"],
+    "question_type": "multi-hop",
+    "question_subtype": "taxonomy-to-limitation"
+  },
+  {
+    "id": "q_037",
+    "question": "What is the exact inference time measured on a GPU Tesla V100 for the V2X-ViTS model?",
+    "ground_truth": "The exact inference time for the V2X-ViTS model is 28ms.",
+    "source_papers": ["V2X-ViT: Vehicle-to-Everything Cooperative Perception with Vision Transformer"],
+    "question_type": "numerical",
+    "question_subtype": "throughput"
+  },
+  {
+    "id": "q_041",
+    "question": "In the communication analysis of the Cascade multi-party inference protocol, what is the exact theoretical formula used to calculate the total single-layer communication byte overhead, denoted as CommBytes?",
+    "ground_truth": "The exact theoretical formula for the single-layer communication byte overhead is CommBytes = βF (2dH + 2dHKV + 2H) · N.",
+    "source_papers": ["CASCADE: TOKEN-SHARDED PRIVATE LLM INFERENCE"],
+    "question_type": "numerical",
+    "question_subtype": "formula"
+  }
+]
