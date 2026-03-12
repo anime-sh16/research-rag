@@ -49,7 +49,7 @@ class QueryResponse(BaseModel):
     run_type="chain",
     tags=[
         f"pipeline_version:{settings.pipeline_version}",
-        "retrieval_method:dense",
+        "retrieval_method:hybrid_rerank",
     ],
 )
 def run_pipeline(question: str) -> dict:
@@ -71,7 +71,7 @@ def run_pipeline(question: str) -> dict:
                         "chunks_retrieved": 0,
                         "papers_cited": [],
                         "answer_preview": "I don't have enough context to answer that.",
-                        "retrieval_method": "dense",
+                        "retrieval_method": "hybrid_rerank",
                         "flag": "empty_retrieval",
                     }
                 }

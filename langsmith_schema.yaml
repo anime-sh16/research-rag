@@ -9,6 +9,7 @@ tracing_conventions:
 allowed_tags:
   pipeline_versions:
     - "v1-baseline"
+    - "v2-hybrid-rerank"
   # query_type tags are set during evaluation runs from evalset metadata.
   # Operational traces omit query_type until classification is implemented.
   query_types:
@@ -19,6 +20,7 @@ allowed_tags:
     - "cross-paper"
   retrieval_methods:
     - "dense"
+    - "hybrid_rerank"
 
 metadata_schemas:
   root_span:
