@@ -157,8 +157,8 @@ class SimpleIngestionPipeline:
             chunks_file = settings.data.temp_dir / f"chunks_{run_id}.jsonl"
             summary_file = settings.data.temp_dir / f"summary_{run_id}.json"
 
-            self.save_chunks_to_jsonl(all_chunks, chunks_file)
-            self.save_summary_to_json(run_summary, summary_file)
+            self._save_chunks_to_jsonl(all_chunks, chunks_file)
+            self._save_summary_to_json(run_summary, summary_file)
             logger.info(
                 "Saved %d chunks → %s | summary → %s",
                 len(all_chunks),
@@ -229,6 +229,114 @@ class SimpleIngestionPipeline:
             logging.getLogger().removeHandler(_log_handler)
             _log_handler.close()
 
+    @classmethod
+    def process_from_pdfs(cls, pdf_dir: Path) -> "IngestionRunSummary":
+        """Extract text from local PDFs, chunk, embed, and upsert to Qdrant."""
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        _log_handler = setup_ingestion_logging(run_id)
+
+        try:
+            if not pdf_dir.is_dir():
+                raise NotADirectoryError(f"PDF directory not found: {pdf_dir}")
+
+            pdf_files = sorted(pdf_dir.rglob("*.pdf"))
+            if not pdf_files:
+                raise FileNotFoundError(f"No PDF files found in {pdf_dir}")
+
+            logger.info(
+                "Found %d PDFs in %s (run_id=%s).", len(pdf_files), pdf_dir, run_id
+            )
+
+            chunker = BasicChunker()
+            all_chunks: list[ChunkMetaData] = []
+
+            for pdf_path in pdf_files:
+                # Use parent directory name as topic (e.g., data/pdfs/LLM/paper.pdf → "LLM")
+                topic = (
+                    pdf_path.parent.name
+                    if pdf_path.parent != pdf_dir
+                    else "local"
+                )
+                full_text = ArxivClient.extract_text_from_pdf(pdf_path)
+                if not full_text:
+                    logger.warning("Skipping %s — no text extracted.", pdf_path.name)
+                    continue
+
+                paper_id = pdf_path.stem
+                result = ArxivResult(
+                    entry_id=paper_id,
+                    title=paper_id.replace("_", " ").replace("-", " "),
+                    topic=topic,
+                    published=datetime.fromtimestamp(pdf_path.stat().st_mtime),
+                    summary="",
+                    authors=None,
+                    comment=None,
+                    primary_category="unknown",
+                    categories=None,
+                    pdf_url=None,
+                    full_text=full_text,
+                )
+                chunks = chunker.chunk_result(result)
+                all_chunks.extend(chunks)
+                logger.info(
+                    "'%s' → %d chunks (topic=%s).", pdf_path.name, len(chunks), topic
+                )
+
+            logger.info("Total chunks from PDFs: %d.", len(all_chunks))
+
+            vector_store = VectorStore()
+            vector_store.ensure_collection(
+                collection_name=settings.db.collection_name
+            )
+            vector_store.upsert_chunks(all_chunks)
+
+            # Build per-topic stats
+            papers_by_topic: dict[str, set[str]] = {}
+            chunks_by_topic: dict[str, int] = {}
+            for chunk in all_chunks:
+                t = chunk.topic or "local"
+                papers_by_topic.setdefault(t, set()).add(chunk.paper_id)
+                chunks_by_topic[t] = chunks_by_topic.get(t, 0) + 1
+
+            all_stats = [
+                TopicIngestionStats(
+                    topic=t,
+                    fetched=len(papers_by_topic[t]),
+                    selected=len(papers_by_topic[t]),
+                    chunks=chunks_by_topic[t],
+                )
+                for t in papers_by_topic
+            ]
+
+            # Save chunks for reproducibility
+            chunks_file = settings.data.temp_dir / f"chunks_{run_id}.jsonl"
+            summary_file = settings.data.temp_dir / f"summary_{run_id}.json"
+
+            run_summary = IngestionRunSummary(
+                run_id=run_id,
+                topics=all_stats,
+                total_papers=sum(s.selected for s in all_stats),
+                total_chunks=len(all_chunks),
+            )
+
+            cls._save_chunks_to_jsonl(all_chunks, chunks_file)
+            cls._save_summary_to_json(run_summary, summary_file)
+            logger.info(
+                "Saved %d chunks → %s | summary → %s",
+                len(all_chunks),
+                chunks_file,
+                summary_file,
+            )
+
+            logger.info(
+                "PDF ingestion complete. %d chunks upserted.", len(all_chunks)
+            )
+            return run_summary
+
+        finally:
+            logging.getLogger().removeHandler(_log_handler)
+            _log_handler.close()
+
     @staticmethod
     def _load_chunks_from_jsonl(path: Path) -> list[ChunkMetaData]:
         if not path.exists():
@@ -242,7 +350,8 @@ class SimpleIngestionPipeline:
                     chunks.append(ChunkMetaData.model_validate(json.loads(line)))
         return chunks
 
-    def save_chunks_to_jsonl(self, chunks: list, output_file):
+    @staticmethod
+    def _save_chunks_to_jsonl(chunks: list, output_file):
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         with open(output_file, "w", encoding="utf-8") as f:
             for chunk in chunks:
@@ -257,7 +366,8 @@ class SimpleIngestionPipeline:
                 )
                 f.write("\n")
 
-    def save_summary_to_json(self, summary: IngestionRunSummary, output_file):
+    @staticmethod
+    def _save_summary_to_json(summary: "IngestionRunSummary", output_file):
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         with open(output_file, "w") as f:
             f.write(summary.model_dump_json(indent=2))

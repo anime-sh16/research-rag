@@ -34,6 +34,13 @@ def _parse_args() -> argparse.Namespace:
         help="Skip fetch/chunk — embed and upsert directly from a saved chunks JSONL file.",
     )
     parser.add_argument(
+        "--from-pdfs",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Skip ArXiv fetch — extract text from local PDFs, chunk, embed, and upsert.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -54,6 +61,8 @@ def main() -> None:
 
     if args.from_chunks:
         summary = SimpleIngestionPipeline.process_from_jsonl(args.from_chunks)
+    elif args.from_pdfs:
+        summary = SimpleIngestionPipeline.process_from_pdfs(args.from_pdfs)
     else:
         topics = args.topics or settings.ingestion.topics
         pipeline = SimpleIngestionPipeline(

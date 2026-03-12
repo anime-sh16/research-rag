@@ -123,10 +123,10 @@ class ArxivClient:
 
         return file_path
 
-    def _extract_pdf_text(self, pdf_url: str, entry_id: str, topic: str) -> str | None:
+    @staticmethod
+    def extract_text_from_pdf(pdf_path: str | os.PathLike) -> str | None:
+        """Extract and clean text from a local PDF file."""
         try:
-            out_dir = str(settings.data.pdf_dir / topic.strip())
-            pdf_path = self._download_pdf_locally(pdf_url, entry_id, out_dir)
             doc = fitz.open(pdf_path)
             text_parts: list[str] = []
             for page in doc:
@@ -154,14 +154,22 @@ class ArxivClient:
 
             # collapse 3+ newlines to 2
             return re.sub(r"(\n\s*){3,}", "\n\n", full_text)
-        except (
-            requests.RequestException,
-            fitz.FileDataError,
-            OSError,
-            ValueError,
-        ) as exc:
+        except (fitz.FileDataError, OSError, ValueError) as exc:
             logger.exception(
-                "Failed to extract text from PDF for %s: %s",
+                "Failed to extract text from PDF %s: %s",
+                pdf_path,
+                exc,
+            )
+            return None
+
+    def _extract_pdf_text(self, pdf_url: str, entry_id: str, topic: str) -> str | None:
+        try:
+            out_dir = str(settings.data.pdf_dir / topic.strip())
+            pdf_path = self._download_pdf_locally(pdf_url, entry_id, out_dir)
+            return self.extract_text_from_pdf(pdf_path)
+        except (requests.RequestException, OSError) as exc:
+            logger.exception(
+                "Failed to download/extract PDF for %s: %s",
                 entry_id,
                 exc,
             )

@@ -187,8 +187,8 @@ class TestProcess:
     @pytest.fixture
     def patched_pipeline(self, pipeline):
         """Additionally patches file I/O and logging so process() doesn't touch disk."""
-        pipeline.save_chunks_to_jsonl = MagicMock()
-        pipeline.save_summary_to_json = MagicMock()
+        pipeline._save_chunks_to_jsonl = MagicMock()
+        pipeline._save_summary_to_json = MagicMock()
         with patch("src.ingestion.pipeline.setup_ingestion_logging") as mock_logging:
             mock_log_handler = MagicMock()
             mock_logging.return_value = mock_log_handler
@@ -245,9 +245,9 @@ class TestProcess:
         patched_pipeline._mock_arxiv.get_arxiv_results.return_value = papers
         patched_pipeline._mock_chunker.chunk_all_results.return_value = chunks
         patched_pipeline.process()
-        chunks_call_args = patched_pipeline.save_chunks_to_jsonl.call_args
+        chunks_call_args = patched_pipeline._save_chunks_to_jsonl.call_args
         assert chunks_call_args.args[0] == chunks
-        summary_call_args = patched_pipeline.save_summary_to_json.call_args
+        summary_call_args = patched_pipeline._save_summary_to_json.call_args
         from src.ingestion.pipeline import IngestionRunSummary
 
         assert isinstance(summary_call_args.args[0], IngestionRunSummary)
