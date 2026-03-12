@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 
 from pydantic import BaseModel
 
@@ -176,6 +177,70 @@ class SimpleIngestionPipeline:
             _log_handler.close()
 
         return run_summary
+
+    @classmethod
+    def process_from_jsonl(cls, chunks_path: Path) -> "IngestionRunSummary":
+        """Load pre-made chunks from a JSONL file and upsert to Qdrant."""
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        _log_handler = setup_ingestion_logging(run_id)
+
+        try:
+            chunks = cls._load_chunks_from_jsonl(chunks_path)
+            logger.info(
+                "Loaded %d chunks from %s (run_id=%s).",
+                len(chunks),
+                chunks_path,
+                run_id,
+            )
+
+            vector_store = VectorStore()
+            vector_store.ensure_collection(collection_name=settings.db.collection_name)
+            vector_store.upsert_chunks(chunks)
+
+            # Build per-topic stats from chunk metadata
+            papers_by_topic: dict[str, set[str]] = {}
+            chunks_by_topic: dict[str, int] = {}
+            for chunk in chunks:
+                topic = chunk.topic or "Unknown"
+                papers_by_topic.setdefault(topic, set()).add(chunk.paper_id)
+                chunks_by_topic[topic] = chunks_by_topic.get(topic, 0) + 1
+
+            all_stats = [
+                TopicIngestionStats(
+                    topic=topic,
+                    fetched=len(papers_by_topic[topic]),
+                    selected=len(papers_by_topic[topic]),
+                    chunks=chunks_by_topic[topic],
+                )
+                for topic in papers_by_topic
+            ]
+
+            run_summary = IngestionRunSummary(
+                run_id=run_id,
+                topics=all_stats,
+                total_papers=sum(s.selected for s in all_stats),
+                total_chunks=len(chunks),
+            )
+
+            logger.info("JSONL ingestion complete. %d chunks upserted.", len(chunks))
+            return run_summary
+
+        finally:
+            logging.getLogger().removeHandler(_log_handler)
+            _log_handler.close()
+
+    @staticmethod
+    def _load_chunks_from_jsonl(path: Path) -> list[ChunkMetaData]:
+        if not path.exists():
+            raise FileNotFoundError(f"Chunks file not found: {path}")
+
+        chunks: list[ChunkMetaData] = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    chunks.append(ChunkMetaData.model_validate(json.loads(line)))
+        return chunks
 
     def save_chunks_to_jsonl(self, chunks: list, output_file):
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
