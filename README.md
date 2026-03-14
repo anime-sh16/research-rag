@@ -4,12 +4,13 @@
 
 An end-to-end production-grade RAG system for querying ArXiv ML research papers with natural language. Ask a question, get a grounded answer with source citations — retrieved from a corpus of curated ML papers spanning LLMs, diffusion models, RL alignment, vision transformers, and more.
 
-Current Stage -- v1 Baseline
+**Current Stage:** v2 — Hybrid Search + Reranking + Gemini 3 Flash
+
 ---
 
 ## Aim
 
-The goal is to build a RAG system over ArXiv ML research, using measurement-driven iteration to improve systematically.
+Build a RAG system over ArXiv ML research using **measurement-driven iteration**: every component exists because evaluation revealed a failure. Every change is validated by running the same fixed 41-question eval set.
 
 ---
 
@@ -19,16 +20,17 @@ The goal is to build a RAG system over ArXiv ML research, using measurement-driv
 User Question
      │
      ▼
-[Retriever] ──── Dense vector search (Gemini embeddings, Qdrant)
-     │                  Top-5 chunks by cosine similarity
+[Retriever] ──── Hybrid search: Dense (Gemini embeddings) + Sparse (BM25)
+     │                  Fused via Reciprocal Rank Fusion (RRF)
      ▼
-[Generator] ──── Gemini 2.5 Flash Lite
+[Reranker]  ──── Jina Reranker v3 — selects top-5 from fused candidates
+     │
+     ▼
+[Generator] ──── Gemini 3 Flash Preview
      │                  Grounded by retrieved context only
      ▼
 Answer + Sources (paper title, authors, arxiv ID, score)
 ```
-
-The pipeline is orchestrated in `src/api/main.py` (`run_pipeline`), decoupled from the HTTP layer so it can be called directly by the evaluation runner.
 
 ---
 
@@ -68,6 +70,7 @@ Fetches paper metadata, filters by category, deduplicates, then downloads PDFs f
 ### 3. Embeddings & Vector Store (`vector_store.py`)
 - **Model:** `gemini-embedding-001` (768-dim output, cosine distance)
 - **Task types:** `RETRIEVAL_DOCUMENT` at ingest, `RETRIEVAL_QUERY` at search time
+- **Sparse index:** BM25 (Qdrant native) built alongside dense index
 - **Database:** Qdrant Cloud (collection: `arxiv_paper_v0.5`)
 - **Deduplication:** UUID5-based chunk IDs prevent re-embedding on re-runs
 - **Rate limiting:** 100-chunk batches with 4s inter-batch sleep + exponential backoff on 429s
@@ -81,7 +84,11 @@ Runs multi-topic fetching with progress tracking. Saves output as `chunks_<times
 
 **Location:** `src/retrieval/retriever.py`
 
-Current approach: **dense vector search** — cosine similarity over Gemini embeddings, top-5 chunks per query.
+**Hybrid search** — dense + sparse fused via RRF:
+1. Dense: cosine similarity over Gemini embeddings
+2. Sparse: BM25 lexical matching (Qdrant native)
+3. Fusion: Reciprocal Rank Fusion merges both ranked lists
+4. Reranking: Jina Reranker v3 selects final top-5
 
 - Query embeddings are cached (MD5-keyed JSONL) to avoid redundant API calls
 - Exponential backoff on embedding rate limits
@@ -93,10 +100,10 @@ Current approach: **dense vector search** — cosine similarity over Gemini embe
 
 **Location:** `src/generation/chain.py`
 
-- **Model:** Gemini 2.5 Flash Lite (`temperature=0.1`)
-- **Prompt (v1-baseline):** System instruction constrains answers to retrieved context only. Context chunks are numbered and titled. If context is insufficient, the model says so.
-- **Tracing:** Full prompt, token usage, and cited paper IDs logged to LangSmith with tag `prompt_version:v1-baseline`
-- **Retry logic:** Up to 5 attempts with max 480s wait on Gemini 429 errors
+- **Model:** Gemini 3 Flash Preview (`temperature=0.1`, `thinking_level=low`)
+- **Prompt:** System instruction constrains answers to retrieved context only. Explicitly instructs the model to answer directly without preamble.
+- **Tracing:** Full prompt, token usage, and cited paper IDs logged to LangSmith
+- **Retry logic:** Up to 5 attempts with exponential backoff on 429/503 errors
 
 ---
 
@@ -127,27 +134,16 @@ Current approach: **dense vector search** — cosine similarity over Gemini embe
 }
 ```
 
-Auto-flags attached to LangSmith root span: `empty_retrieval`, `low_retrieval_score` (< 0.5), `single_source_warning`.
-
 Run locally:
 ```bash
 uv run uvicorn src.api.main:app --reload
-```
-
-Query the API:
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What training objective does InstructGPT use?"}'
 ```
 
 ---
 
 ## Evaluation
 
-**Location:**
-- `src/evaluation/`
-- `./evaluation/`
+**Location:** `src/evaluation/` | `./evaluation/`
 
 ### Evaluation Set
 41 hand-curated questions with ground truth answers, covering:
@@ -166,61 +162,100 @@ The eval set is **fixed and immutable** — all experiments run against the same
 
 ---
 
-## Baseline Results
+## Results
 
-**Experiment:** `v1-baseline` | Dense retrieval + Gemini 2.5 Flash Lite | 2026-03-11
+### Aggregate Scores Across Experiments
 
-| Metric | Score |
-|---|---|
-| Faithfulness | **0.8742** |
-| Answer Relevancy | **0.7509** |
-| Context Precision | **0.6818** |
-| Context Recall | **0.8415** |
+| Metric | v1-baseline | v2-hybrid-rerank | v2-hybrid-rerank-v2 |
+|---|---|---|---|
+| **Faithfulness** | 0.8742 | 0.8918 | **0.9753** |
+| **Answer Relevancy** | 0.7509 | 0.7818 | **0.8726** |
+| **Context Precision** | 0.6818 | 0.7680 | **0.8295** |
+| **Context Recall** | 0.8415 | 0.9071 | **0.8984** |
+| **"Don't know" answers** | 8 | 5 | **3** |
 
-![RAGAS Metrics Overview](images/v1-baseline/scalar_metrics_bar_chart.png)
+![RAGAS Metrics Comparison](evaluation/results/ragas_comparison.png)
 
-### Key Observations
-- **Faithfulness is strong (0.87)** — the model stays grounded in retrieved context. When it has the right chunks, it produces correct answers. When it lacks context, it refuses to hallucinate and says "I don't have enough information" — which is the correct generation behavior.
-- **Context Precision (0.68) is the weakest metric** — even when the correct source is retrieved, relevant chunks are often buried at positions 3–5 instead of 1–2. Dense search alone cannot rank effectively.
-- **Retrieval similarity scores cluster tightly around 0.7** with score spreads as low as 0.008–0.05 across retrieved chunks. The retriever cannot distinguish "highly relevant" from "somewhat relevant."
-- **~8 questions produce "I don't know" responses** — every one of these is a retrieval failure, not a generation failure. The model is correctly refusing when given insufficient context.
-- **Source concentration kills cross-paper questions** — with no diversity mechanism, top-5 by cosine similarity naturally locks onto one paper's embedding cluster. Survey papers on related topics (RAG, RLHF) dominate retrieval over the specific target papers.
+---
 
-### Performance by Question Type
+### v1-baseline — Dense Retrieval + Gemini 2.5 Flash Lite (2026-03-11)
 
-![RAGAS Metrics by Question Type](images/v1-baseline/rag_metrics_comparison.png)
+**Key observations:**
+- Faithfulness strong (0.87) — model correctly refuses to hallucinate when context is missing
+- Context Precision (0.68) weakest — relevant chunks buried at positions 3–5, dense ranking cannot distinguish relevance
+- ~8 "don't know" responses — all retrieval failures, not generation failures
+- Cross-paper questions catastrophic (5/6 DK) — dense-only retrieval locks onto one paper's cluster
 
-| Type | Result | Details |
-|---|---|---|
-| **Factual** | Strong | Most samples perform well. 2 samples show low context precision despite retrieving the correct source — a ranking problem. |
-| **Conceptual** | Strong | All samples score high. 1 edge case where a wrong-source chunk caused the model to decline answering, despite the retrieved context containing enough information. |
-| **Cross-paper** | Catastrophic failure | 5/6 samples produce "I don't have enough information." Retrieval locks onto a single source (spread_diversity=1–2 in most cases) and cannot surface chunks from the second required paper. Survey papers on related topics crowd out the actual target papers. |
-| **Multi-hop** | Mixed | 4/6 good results, all 6 highly faithful. However, 4/6 incorrectly retrieve from multiple sources when all multi-hop questions are single-source — indicating the retriever drifts to semantically similar but wrong papers. |
-| **Numerical** | Weak | Tabular data destroyed during PDF extraction and chunking. Answers that exist only in tables are invisible to the retriever. 2/5 decent results only when the answer appears in running text. |
+**Root causes identified:** No lexical retrieval signal, poor chunk ranking, source concentration without diversity
 
-### Root Causes Identified
+Full analysis: [v1-baseline-analysis.md](evaluation/results/v1-baseline/v1-baseline-analysis.md)
 
-1. **No lexical retrieval signal** — dense-only search has no way to match specific paper names, method names, or technical terms exactly. When a cross-paper question mentions "AWQ" and "Quasar-ViT," the dense embedding lands between the two concepts (eg. quantization) and retrieves whichever cluster is closer, missing the other entirely.
+---
 
-2. **Poor chunk ranking** — even when correct chunks are retrieved, they are not ranked at the top. Context Precision suffers because the retriever treats all ~0.7-scoring chunks as equally relevant.
+### v2-hybrid-rerank — Hybrid Search + Jina Reranker v2 (2026-03-12)
 
-3. **Fixed-length chunking** — splits content without awareness of document structure, breaking tables, logical sections, and cross-sentence arguments. Chunks lack context about which paper section they belong to.
+**Changes:** Added BM25 sparse retrieval + RRF fusion + Jina reranker-v2-base-multilingual
 
-4. **Tabular data loss** — PDF text extraction strips table formatting. Numerical answers embedded in tables become fragmented text that neither embeds nor retrieves well.
+**Key results:**
+- Context Precision +0.09 (largest gain) — reranker promotes relevant chunks to top position
+- Context Recall +0.07 — hybrid search surfaces papers missed by dense-only
+- 4 previously DK questions resolved; 1 new regression (q_025)
+- Cross-paper DK: 5 → 3. BM25 resolved exact-term cross-paper failures (q_028, q_031)
 
-5. **Source concentration without diversity** — top-k by cosine similarity has no mechanism to enforce source diversity. A paper with 20 chunks will dominate over a paper with 5 chunks even when both are needed.
+**Remaining failures:** 2 retrieval diversity gaps, 1 generation failure with improved retrieval, 1 ingestion failure (table data)
 
-### Possible Solutions
+Full analysis: [V2-HYBRID-RERANK-ANALYSIS.md](evaluation/results/v2-hybrid-rerank/V2-HYBRID-RERANK-ANALYSIS.md)
 
-| Root Cause | Possible Approach |
-|---|---|
-| No lexical signal | **Hybrid search** — combine dense vectors with BM25 sparse retrieval (Qdrant native) via Reciprocal Rank Fusion. BM25 matches exact terms, recovering papers that dense search misses. |
-| Poor chunk ranking | **Cross-encoder reranking** — over-retrieve (top-20), then rerank with Cohere Rerank to push truly relevant chunks to top-5. Cross-encoders read query and chunk jointly, far more accurate than bi-encoder similarity. |
-| Fixed-length chunking | **Semantic chunking** with contextual headers — split on topic boundaries rather than token count; prepend paper title and section name to each chunk for retrieval context. |
-| Tabular data loss | **Table-aware PDF extraction** — use a parser that preserves table structure as markdown during ingestion. |
-| Source concentration | **Diversity-aware retrieval** — hybrid search + RRF naturally diversifies results. If insufficient, apply MMR or post-retrieval source balancing. |
+---
 
-Full per-question breakdown: [v1-baseline.json](evaluation/results/v1-baseline.json) | Detailed analysis: [v1-baseline-analysis.md](evaluation/results/v1-baseline-analysis.md)
+### v2-hybrid-rerank-v2 — Upgraded LLM + Jina Reranker v3 (2026-03-14)
+
+**Changes:** Gemini 2.5 Flash Lite → Gemini 3 Flash Preview | Jina reranker-v2 → Jina reranker-v3
+
+**Key results:**
+- Faithfulness: 0.8918 → **0.9753** (+0.08)
+- Answer Relevancy: 0.7818 → **0.8726** (+0.09)
+- DK count: 5 → **2** (q_025 regression fixed, q_030 resolved)
+- Cross-paper category transformed: faithfulness 0.58 → **0.97**, answer relevancy 0.56 → **0.93**
+
+**Why it worked:** `gemini-3-flash-preview` synthesizes across heterogeneous chunks that the previous model refused to process — directly resolving the generation-layer failures identified in v2.1.
+
+**Remaining failures:** 2 retrieval diversity gaps (q_029, q_032 — AWQ/QServe not surfaced), 2 multi-hop recall gaps (q_033, q_034), 1 ingestion failure (q_039 — table data)
+
+Full analysis: [V2-HYBRID-RERANK-ANALYSIS-v2.md](evaluation/results/v2-hybrid-rerank-v2/V2-HYBRID-RERANK-ANALYSIS-v2.md)
+
+### Prompt A/B Test — v1 vs v2 system prompt (2026-03-14)
+
+**Held constant:** retrieval pipeline, model, eval set (41 questions)
+
+**v1 prompt:** Minimal — "answer based on context only, say don't know if insufficient."
+
+**v2 prompt:** Structured rules — direct answering (no hedging phrases), inline citations `[1][2]`, partial-answer policy (answer what's available, state what's missing).
+
+| Metric | v1 prompt | v2 prompt | Delta |
+|---|---|---|---|
+| **Faithfulness** | 0.9753 | 0.9628\* | -0.013 |
+| **Answer Relevancy** | 0.8726 | **0.9004** | **+0.028** |
+| **Context Precision** | 0.8295 | 0.8212 | -0.008 (noise) |
+| **Context Recall** | 0.8984 | 0.9024 | +0.004 (noise) |
+
+\*One evaluator timeout on q_005 forced a 0.0 fallback. Excluding it: v2 faithfulness = **0.987** (+0.012 over v1).
+
+**Findings:**
+- Answer Relevancy gained +0.028 — the direct-answering rule eliminated hedged, indirect responses that RAGAS penalizes
+-Answer structure mproved resulting in more cohesive answers.
+- Faithfulness is net positive once the timeout artifact is removed; structured bullet format exposes more individual claims to verification but they hold up
+- Context Precision/Recall deltas (~0.008) are LLM-as-judge variance — prompt has no effect on retrieval
+
+**v2 prompt adopted as default.**
+
+---
+
+### Score Delta by Question Type (v1 → v2.2)
+
+![Score Delta Heatmap](evaluation/results/category_delta_heatmap.png)
+
+Cross-paper questions saw the largest gains across faithfulness and answer relevancy. Factual questions now approach ceiling performance. Multi-hop recall shows a slight dip due to persistent second-hop retrieval gaps.
 
 ---
 
@@ -239,7 +274,7 @@ research-rag/
 │   │   ├── pipeline.py           # Multi-topic ingestion orchestrator
 │   │   └── vector_store.py       # Gemini embeddings + Qdrant upsert
 │   ├── retrieval/
-│   │   └── retriever.py          # Dense search + embed cache + proxy metrics
+│   │   └── retriever.py          # Hybrid search (dense + BM25) + RRF + reranking
 │   ├── generation/
 │   │   └── chain.py              # Gemini generation + LangSmith tracing
 │   └── evaluation/
@@ -248,7 +283,9 @@ research-rag/
 ├── evaluation/
 │   ├── evalset.json              # 41 questions + ground truth (immutable)
 │   └── results/
-│       └── v1-baseline.json      # Baseline RAGAS snapshot
+│       ├── v1-baseline.json
+│       ├── v2-hybrid-rerank/
+│       └── v2-hybrid-rerank-v2/
 ├── tests/                        # Unit + integration tests (mirrors src/)
 ├── scripts/                      # Dev utilities (verify connections, smoke tests)
 ├── .github/workflows/ci.yml      # Lint + format + test on every push
@@ -263,7 +300,9 @@ research-rag/
 | Layer | Technology |
 |---|---|
 | **Embeddings** | Google Gemini (`gemini-embedding-001`, 768d) |
-| **LLM** | Google Gemini 2.5 Flash Lite |
+| **Sparse Search** | BM25 via Qdrant native |
+| **Reranker** | Jina Reranker v3 |
+| **LLM** | Google Gemini 3 Flash Preview |
 | **Vector DB** | Qdrant Cloud |
 | **PDF Extraction** | PyMuPDF |
 | **Chunking** | LangChain `RecursiveCharacterTextSplitter` + Tiktoken |
@@ -300,7 +339,7 @@ cp .env.template .env
 | `GOOGLE_API_KEY` | [Google AI Studio](https://aistudio.google.com) |
 | `QDRANT_URL` | Qdrant Cloud console |
 | `QDRANT_API_KEY` | Qdrant Cloud console |
-| `COHERE_API_KEY` | Cohere dashboard |
+| `JINA_API_KEY` | Jina AI dashboard |
 | `LANGSMITH_API_KEY` | LangSmith settings |
 | `LANGSMITH_PROJECT` | LangSmith project name |
 | `LANGSMITH_TRACING` | `true` to enable tracing |
@@ -321,7 +360,7 @@ uv run scripts/verify_connections.py
 uv run uvicorn src.api.main:app --reload
 
 # Run evaluation against the full eval set
-uv run python -m src.evaluation.ragas_runner
+uv run python -m src.evaluation.ragas_runner --experiment <name>
 
 # Run tests
 uv run pytest
@@ -343,11 +382,11 @@ Every push to `main` and every pull request runs:
 
 ---
 
-## Future Work
+## Next Steps
 
-- **Hybrid search** — add BM25 sparse retrieval fused with dense via Reciprocal Rank Fusion (RRF) to improve context precision on keyword-heavy queries
-- **Reranking** — cross-encoder reranker (Cohere) as a post-retrieval filter to push most relevant chunks to top-k
-- **Query expansion** — HyDE or sub-question decomposition to improve multi-hop and cross-paper recall
-- **RAGAS regression gate** — block CI merges if evaluation scores drop below a stored baseline threshold
-- **Metadata filtering** — filter by publication date, topic, or author at query time
-- **Improved Chunking** - Try improving the chinking process
+| Priority | Task | Addresses |
+|---|---|---|
+| 1 | **Retrieval diversity (MMR / source-aware reranking)** | q_029, q_032 — query terms overwhelm one source |
+| 2 | **Multi-hop retrieval / query decomposition** | q_033, q_034 — second hop not retrieved |
+| 3 | **Table-aware PDF ingestion** | q_039 — only persistent full DK |
+| 4 | **RAGAS regression gate in CI** | Block deploys if scores drop below stored baseline |

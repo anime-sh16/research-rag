@@ -1,13 +1,10 @@
 import argparse
-import json
 import logging
 import sys
 from pathlib import Path
 
 from src.config.config import settings
-from src.ingestion.chunker import ChunkMetaData
 from src.ingestion.pipeline import SimpleIngestionPipeline
-from src.ingestion.vector_store import VectorStore
 
 
 def _parse_args() -> argparse.Namespace:
@@ -37,32 +34,19 @@ def _parse_args() -> argparse.Namespace:
         help="Skip fetch/chunk — embed and upsert directly from a saved chunks JSONL file.",
     )
     parser.add_argument(
+        "--from-pdfs",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Skip ArXiv fetch — extract text from local PDFs, chunk, embed, and upsert.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging verbosity.",
     )
     return parser.parse_args()
-
-
-def _upsert_from_jsonl(path: Path) -> None:
-    if not path.exists():
-        logging.error("Chunks file not found: %s", path)
-        sys.exit(1)
-
-    chunks: list[ChunkMetaData] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                chunks.append(ChunkMetaData.model_validate(json.loads(line)))
-
-    logging.info("Loaded %d chunks from %s", len(chunks), path)
-
-    store = VectorStore()
-    store.ensure_collection(collection_name=settings.db.collection_name)
-    store.upsert_chunks(chunks)
-    logging.info("Done.")
 
 
 def main() -> None:
@@ -76,15 +60,17 @@ def main() -> None:
     )
 
     if args.from_chunks:
-        _upsert_from_jsonl(args.from_chunks)
-        return
+        summary = SimpleIngestionPipeline.process_from_jsonl(args.from_chunks)
+    elif args.from_pdfs:
+        summary = SimpleIngestionPipeline.process_from_pdfs(args.from_pdfs)
+    else:
+        topics = args.topics or settings.ingestion.topics
+        pipeline = SimpleIngestionPipeline(
+            topics=topics,
+            target_papers_no=args.target,
+        )
+        summary = pipeline.process()
 
-    topics = args.topics or settings.ingestion.topics
-    pipeline = SimpleIngestionPipeline(
-        topics=topics,
-        target_papers_no=args.target,
-    )
-    summary = pipeline.process()
     print(summary.model_dump_json(indent=2))
 
 

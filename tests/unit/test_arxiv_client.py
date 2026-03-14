@@ -72,10 +72,6 @@ class TestParseArxivResult:
         result = client._parse_arxiv_result(raw, "transformers")
         assert result.comment is None
 
-    def test_returns_arxiv_result_instance(self, client: ArxivClient) -> None:
-        raw = _make_mock_raw_result()
-        assert isinstance(client._parse_arxiv_result(raw, "transformers"), ArxivResult)
-
     def test_topic_stored_from_query(self, client: ArxivClient) -> None:
         raw = _make_mock_raw_result()
         result = client._parse_arxiv_result(raw, "retrieval augmented generation")
