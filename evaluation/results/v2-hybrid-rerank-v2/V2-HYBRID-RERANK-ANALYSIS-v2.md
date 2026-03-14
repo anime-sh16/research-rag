@@ -45,7 +45,7 @@ All metrics except Context Recall improved significantly. Context Recall dipped 
 | q_034 | multi-hop/arch-to-evaluation | Partial | Partial | Partial | Persistent (half of multi-hop) |
 | q_039 | numerical/throughput | DK | DK | **DK** | **PERSISTENT** (ingestion) |
 
-**Net DK count: 8 → 5 → 2** (only q_029 partial-DK, q_039 full DK)
+**Net DK count: 8 → 5 → 3** (q_029 partial-DK, q_032 partial-DK, q_039 full DK)
 
 ---
 
@@ -287,7 +287,7 @@ Several questions show answer relevancy shifts that may reflect RAGAS evaluator 
 
 ## Final Assessment
 
-**v2.2-hybrid-rerank-v2 represents a major step forward, driven primarily by the LLM upgrade.** Faithfulness crossed 0.97, answer relevancy crossed 0.87, and only 2 DK answers remain (down from 8 in v1).
+**v2.2-hybrid-rerank-v2 represents a major step forward, driven primarily by the LLM upgrade.** Faithfulness crossed 0.97, answer relevancy crossed 0.87, and only 3 DK answers remain (down from 8 in v1).
 
 The most significant outcome: **the generation-layer bottleneck identified in v2.1 is resolved.** The `gemini-3-flash-preview` model synthesizes across heterogeneous chunks that the previous model refused to process. This fixes the q_025 regression, resolves q_030, and produces partial answers where v2.1 gave blanket refusals.
 
