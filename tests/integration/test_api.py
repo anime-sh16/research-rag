@@ -112,4 +112,6 @@ class TestQueryEndpoint:
 
             c = TestClient(app)
             c.post("/query", json={"question": "What is LoRA?"})
-            mock_chain.generate.assert_called_once_with("What is LoRA?", FAKE_CHUNKS)
+            mock_chain.generate.assert_called_once_with(
+                "What is LoRA?", FAKE_CHUNKS, prompt_version=None
+            )
