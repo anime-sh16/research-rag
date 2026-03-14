@@ -251,8 +251,9 @@ class SimpleIngestionPipeline:
             all_chunks: list[ChunkMetaData] = []
 
             for pdf_path in pdf_files:
-                # Use parent directory name as topic (e.g., data/pdfs/LLM/paper.pdf → "LLM")
-                topic = pdf_path.parent.name if pdf_path.parent != pdf_dir else "local"
+                # Use top-level subdirectory name as topic (e.g., data/pdfs/LLM/sub/paper.pdf → "LLM")
+                relative_parts = pdf_path.relative_to(pdf_dir).parts
+                topic = relative_parts[0] if len(relative_parts) > 1 else "local"
                 full_text = ArxivClient.extract_text_from_pdf(pdf_path)
                 if not full_text:
                     logger.warning("Skipping %s — no text extracted.", pdf_path.name)
@@ -335,11 +336,21 @@ class SimpleIngestionPipeline:
             raise FileNotFoundError(f"Chunks file not found: {path}")
 
         chunks: list[ChunkMetaData] = []
+        skipped = 0
         with open(path, "r", encoding="utf-8") as f:
-            for line in f:
+            for line_no, line in enumerate(f, start=1):
                 line = line.strip()
-                if line:
+                if not line:
+                    continue
+                try:
                     chunks.append(ChunkMetaData.model_validate(json.loads(line)))
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.warning(
+                        "Skipping malformed line %d: %s (%s)", line_no, line[:80], e
+                    )
+                    skipped += 1
+        if skipped:
+            logger.warning("Skipped %d malformed lines in %s.", skipped, path)
         return chunks
 
     @staticmethod

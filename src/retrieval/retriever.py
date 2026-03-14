@@ -3,6 +3,7 @@ import json
 import logging
 from pathlib import Path
 
+import httpx
 import requests
 from google import genai
 from google.genai import errors as genai_errors
@@ -27,6 +28,24 @@ logger = logging.getLogger(__name__)
 def _is_rate_limit_error(exc: BaseException) -> bool:
     return isinstance(exc, genai_errors.ClientError) and (
         getattr(exc, "status_code", None) == 429 or "429" in str(exc)
+    )
+
+
+def _is_timeout_error(exc: BaseException) -> bool:
+    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+        return True
+    if isinstance(exc, genai_errors.ServerError) and (
+        getattr(exc, "status_code", None) == 504
+        or "504" in str(exc)
+        or "DEADLINE_EXCEEDED" in str(exc)
+    ):
+        return True
+    return False
+
+
+def _is_service_unavailable_error(exc: BaseException) -> bool:
+    return isinstance(exc, genai_errors.ServerError) and (
+        getattr(exc, "status_code", None) == 503 or "503" in str(exc)
     )
 
 
@@ -98,9 +117,23 @@ class Retriever:
             )
 
     @retry(
+        retry=retry_if_exception(_is_service_unavailable_error),
+        wait=wait_exponential(multiplier=180, min=180, max=900, exp_base=1),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    @retry(
         retry=retry_if_exception(_is_rate_limit_error),
         wait=wait_exponential(multiplier=60, min=60, max=480),
         stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    @retry(
+        retry=retry_if_exception(_is_timeout_error),
+        wait=wait_exponential(multiplier=5, min=5, max=60),
+        stop=stop_after_attempt(3),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
@@ -133,6 +166,7 @@ class Retriever:
         self._save_to_cache(query, query_hash, embedding)
         return embedding
 
+    @traceable(run_type="tool", name="retrieval/jina_rerank")
     def _rerank(self, query: str, candidates: list[dict]) -> list[dict]:
         """Rerank candidates using Jina Reranker API, return top_k sorted by relevance."""
         if not candidates:
@@ -141,7 +175,7 @@ class Retriever:
         response = requests.post(
             _JINA_RERANK_URL,
             headers=self._jina_headers,
-            data={
+            json={
                 "model": settings.retrieval.jina_rerank_model,
                 "query": query,
                 "documents": [c["text"] for c in candidates],

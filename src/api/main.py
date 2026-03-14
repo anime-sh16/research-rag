@@ -104,7 +104,7 @@ def run_pipeline(question: str) -> dict:
                     "answer_preview": answer[:150] + "..."
                     if len(answer) > 150
                     else answer,
-                    "retrieval_method": "dense",
+                    "retrieval_method": "hybrid_rerank",
                     "flag": flag,
                 }
             }

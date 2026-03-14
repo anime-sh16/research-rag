@@ -1,16 +1,3 @@
-"""RAGAS evaluation runner integrated with LangSmith Experiments.
-
-Usage:
-    uv run python src/evaluation/ragas_runner.py --experiment <name>
-
-Flow:
-    1. LangSmith evaluate() iterates the dataset, calling run_pipeline() per row
-    2. Each pipeline call produces a full operational trace (retrieval + generation)
-    3. RAGAS evaluator functions score each (run, example) pair
-    4. Scores are attached as feedback on each run in the LangSmith Experiment
-    5. A local snapshot is saved to evaluation/results/<name>.json
-"""
-
 import argparse
 import asyncio
 import json
@@ -20,6 +7,7 @@ from datetime import datetime
 
 import instructor
 from google import genai
+from google.genai import types
 from langsmith import evaluate
 from langsmith.schemas import Example, Run
 from ragas.embeddings.base import embedding_factory
@@ -39,12 +27,17 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("google_genai").setLevel(logging.WARNING)
 logging.getLogger("src.retrieval").setLevel(logging.WARNING)
 logging.getLogger("src.generation").setLevel(logging.WARNING)
+logging.getLogger("tenacity").setLevel(logging.DEBUG)
+
 
 logger = logging.getLogger(__name__)
 
 os.environ["GOOGLE_API_KEY"] = settings.google_api_key.get_secret_value()
 
-_gemini_client = genai.Client(api_key=settings.google_api_key.get_secret_value())
+_gemini_client = genai.Client(
+    api_key=settings.google_api_key.get_secret_value(),
+    http_options=types.HttpOptions(timeout=120000),
+)
 _async_instructor = instructor.from_genai(
     _gemini_client,
     mode=instructor.Mode.GENAI_STRUCTURED_OUTPUTS,
@@ -54,6 +47,7 @@ _evaluator_llm = InstructorLLM(
     client=_async_instructor,
     model=settings.evaluation.evaluator_model,
     provider="google",
+    thinking_config=types.ThinkingConfig(thinking_level="low", include_thoughts=True),
 )
 _evaluator_embeddings = embedding_factory(
     provider="google",
@@ -83,28 +77,37 @@ def _safe_ragas_score(metric_name: str, coro) -> float | None:
         logger.debug("  [PASS] %-22s score=%.4f", metric_name, score)
         return score
     except Exception as e:
-        logger.warning("  [FAIL] %-22s error=%s", metric_name, type(e).__name__)
+        logger.warning("  [FAIL] %-22s error=%s: %s", metric_name, type(e).__name__, e)
         return None
 
 
 def eval_faithfulness(run: Run, example: Example) -> dict:
+    outputs = run.outputs or {}
+    answer = outputs.get("answer")
+    contexts = outputs.get("contexts", [])
+    if not answer:
+        return {"key": "faithfulness", "score": None}
     score = _safe_ragas_score(
         "faithfulness",
         _faithfulness.ascore(
             user_input=example.inputs["question"],
-            response=run.outputs["answer"],
-            retrieved_contexts=run.outputs["contexts"],
+            response=answer,
+            retrieved_contexts=contexts,
         ),
     )
     return {"key": "faithfulness", "score": score}
 
 
 def eval_answer_relevancy(run: Run, example: Example) -> dict:
+    outputs = run.outputs or {}
+    answer = outputs.get("answer")
+    if not answer:
+        return {"key": "answer_relevancy", "score": None}
     score = _safe_ragas_score(
         "answer_relevancy",
         _answer_relevancy.ascore(
             user_input=example.inputs["question"],
-            response=run.outputs["answer"],
+            response=answer,
         ),
     )
     return {"key": "answer_relevancy", "score": score}
