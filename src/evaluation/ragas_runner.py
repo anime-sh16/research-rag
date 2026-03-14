@@ -24,10 +24,11 @@ from src.config.config import settings
 
 # Suppress noisy third-party loggers
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger("google_genai").setLevel(logging.INFO)
 logging.getLogger("src.retrieval").setLevel(logging.WARNING)
 logging.getLogger("src.generation").setLevel(logging.WARNING)
-logging.getLogger("tenacity").setLevel(logging.DEBUG)
+logging.getLogger("tenacity").setLevel(logging.INFO)
+logging.getLogger("langsmith").setLevel(logging.INFO)
 
 
 logger = logging.getLogger(__name__)
@@ -62,11 +63,15 @@ _context_precision = ContextPrecision(llm=_evaluator_llm)
 _context_recall = ContextRecall(llm=_evaluator_llm)
 
 
-def target(inputs: dict) -> dict:
-    """Run the RAG pipeline and format output for RAGAS evaluation."""
-    result = run_pipeline(inputs["question"])
-    contexts = [chunk["text"] for chunk in result["sources"] if chunk.get("text")]
-    return {"answer": result["answer"], "contexts": contexts}
+def make_target(prompt_version: str | None = None):
+    """Return a target function that uses the specified prompt variant."""
+
+    def target(inputs: dict) -> dict:
+        result = run_pipeline(inputs["question"], prompt_version=prompt_version)
+        contexts = [chunk["text"] for chunk in result["sources"] if chunk.get("text")]
+        return {"answer": result["answer"], "contexts": contexts}
+
+    return target
 
 
 def _safe_ragas_score(metric_name: str, coro) -> float | None:
@@ -195,16 +200,17 @@ def _save_snapshot(experiment_name: str, results) -> str:
     return str(snapshot_path)
 
 
-def run_evaluation(experiment_name: str) -> None:
+def run_evaluation(experiment_name: str, prompt_version: str | None = None) -> None:
     """Run RAGAS evaluation on the fixed eval set and save results."""
     dataset_name = settings.evaluation.dataset_name
 
     logger.info("Experiment : %s", experiment_name)
     logger.info("Dataset    : %s", dataset_name)
     logger.info("Model      : %s", settings.evaluation.evaluator_model)
+    logger.info("Prompt     : %s", prompt_version or "default")
 
     results = evaluate(
-        target,
+        make_target(prompt_version),
         data=dataset_name,
         evaluators=[
             eval_faithfulness,
@@ -244,5 +250,10 @@ if __name__ == "__main__":
         default=settings.pipeline_version,
         help="Name for this experiment (default: current pipeline_version)",
     )
+    parser.add_argument(
+        "--prompt",
+        default=None,
+        help="Prompt variant to use (default: RAGChain default). Must be a key in PROMPT_VARIANTS.",
+    )
     args = parser.parse_args()
-    run_evaluation(args.experiment)
+    run_evaluation(args.experiment, prompt_version=args.prompt)

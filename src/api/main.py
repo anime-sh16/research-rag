@@ -52,7 +52,7 @@ class QueryResponse(BaseModel):
         "retrieval_method:hybrid_rerank",
     ],
 )
-def run_pipeline(question: str) -> dict:
+def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
     """Core orchestration logic, decoupled from HTTP for easier evaluation."""
     run = get_current_run_tree()
 
@@ -78,7 +78,7 @@ def run_pipeline(question: str) -> dict:
             )
         return {"answer": "I don't have enough context to answer that.", "sources": []}
 
-    answer = chain.generate(question, chunks)
+    answer = chain.generate(question, chunks, prompt_version=prompt_version)
 
     # Add a human-readable summary to the Root Span
     if run:

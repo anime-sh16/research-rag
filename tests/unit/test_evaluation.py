@@ -346,8 +346,10 @@ class TestSaveSnapshot:
         assert data["per_question"][0]["answer"] is None
 
 
-class TestTarget:
-    def test_returns_answer_and_contexts_keys(self) -> None:
+class TestMakeTarget:
+    """make_target is a factory — the returned callable is the evaluation target."""
+
+    def test_target_returns_answer_and_contexts_keys(self) -> None:
         fake_result = {
             "answer": "Some answer.",
             "sources": [{"text": "chunk 1"}, {"text": "chunk 2"}],
@@ -355,9 +357,10 @@ class TestTarget:
         with patch(
             "src.evaluation.ragas_runner.run_pipeline", return_value=fake_result
         ):
-            from src.evaluation.ragas_runner import target
+            from src.evaluation.ragas_runner import make_target
 
-            result = target({"question": "What is attention?"})
+            fn = make_target()
+            result = fn({"question": "What is attention?"})
 
         assert "answer" in result
         assert "contexts" in result
@@ -374,9 +377,10 @@ class TestTarget:
         with patch(
             "src.evaluation.ragas_runner.run_pipeline", return_value=fake_result
         ):
-            from src.evaluation.ragas_runner import target
+            from src.evaluation.ragas_runner import make_target
 
-            result = target({"question": "query"})
+            fn = make_target()
+            result = fn({"question": "query"})
 
         # Only sources with a 'text' key should be included
         assert result["contexts"] == ["chunk A", "chunk B"]
@@ -386,11 +390,40 @@ class TestTarget:
         with patch(
             "src.evaluation.ragas_runner.run_pipeline", return_value=fake_result
         ):
-            from src.evaluation.ragas_runner import target
+            from src.evaluation.ragas_runner import make_target
 
-            result = target({"question": "query"})
+            fn = make_target()
+            result = fn({"question": "query"})
 
         assert result["answer"] == "Specific answer."
+
+    def test_prompt_version_is_forwarded_to_run_pipeline(self) -> None:
+        """make_target captures prompt_version and passes it on every invocation."""
+        fake_result = {"answer": "A.", "sources": []}
+        with patch(
+            "src.evaluation.ragas_runner.run_pipeline", return_value=fake_result
+        ) as mock_pipeline:
+            from src.evaluation.ragas_runner import make_target
+
+            fn = make_target(prompt_version="v1")
+            fn({"question": "query"})
+
+        call_kwargs = mock_pipeline.call_args
+        assert call_kwargs.kwargs.get("prompt_version") == "v1"
+
+    def test_none_prompt_version_is_forwarded(self) -> None:
+        """make_target(None) must pass None through, not substitute a default."""
+        fake_result = {"answer": "A.", "sources": []}
+        with patch(
+            "src.evaluation.ragas_runner.run_pipeline", return_value=fake_result
+        ) as mock_pipeline:
+            from src.evaluation.ragas_runner import make_target
+
+            fn = make_target(prompt_version=None)
+            fn({"question": "query"})
+
+        call_kwargs = mock_pipeline.call_args
+        assert call_kwargs.kwargs.get("prompt_version") is None
 
 
 class TestSafeRagasScore:

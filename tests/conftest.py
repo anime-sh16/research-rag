@@ -5,7 +5,7 @@ import os
 os.environ.setdefault("GOOGLE_API_KEY", "dummy-for-tests")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 os.environ.setdefault("QDRANT_API_KEY", "dummy-for-tests")
-os.environ.setdefault("COHERE_API_KEY", "dummy-for-tests")
+os.environ.setdefault("JINA_API_KEY", "dummy-for-tests")
 os.environ.setdefault("LANGSMITH_API_KEY", "dummy-for-tests")
 os.environ.setdefault("LANGSMITH_PROJECT", "test-project")
 
