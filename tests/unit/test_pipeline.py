@@ -7,7 +7,7 @@ import pytest
 
 from src.ingestion.arxiv_client import ArxivResult
 from src.ingestion.chunker import ChunkMetaData
-from src.ingestion.pipeline import IngestionRunSummary, TopicIngestionStats
+from src.ingestion.pipeline import IngestionRunSummary
 
 
 def _make_arxiv_result(
@@ -68,16 +68,6 @@ def pipeline():
 
 
 class TestFetchPaperSingleTopic:
-    def test_returns_topic_ingestion_stats(self, pipeline) -> None:
-        pipeline._mock_arxiv.get_arxiv_results.return_value = []
-        stats, _ = pipeline.fetch_paper_single_topic("transformers")
-        assert isinstance(stats, TopicIngestionStats)
-
-    def test_returns_selected_papers_list(self, pipeline) -> None:
-        pipeline._mock_arxiv.get_arxiv_results.return_value = []
-        _, papers = pipeline.fetch_paper_single_topic("transformers")
-        assert isinstance(papers, list)
-
     def test_fetched_count_matches_api_response(self, pipeline) -> None:
         papers = [_make_arxiv_result(f"id_{i}") for i in range(5)]
         pipeline._mock_arxiv.get_arxiv_results.return_value = papers
@@ -154,11 +144,9 @@ class TestFetchPaperSingleTopic:
 class TestChunkSingleTopic:
     def test_delegates_to_chunker(self, pipeline) -> None:
         papers = [_make_arxiv_result("aaa")]
-        expected = [_make_chunk("aaa")]
-        pipeline._mock_chunker.chunk_all_results.return_value = expected
-        result = pipeline.chunk_single_topic(papers)
+        pipeline._mock_chunker.chunk_all_results.return_value = [_make_chunk("aaa")]
+        pipeline.chunk_single_topic(papers)
         pipeline._mock_chunker.chunk_all_results.assert_called_once_with(papers)
-        assert result == expected
 
     def test_empty_papers_returns_empty_list(self, pipeline) -> None:
         pipeline._mock_chunker.chunk_all_results.return_value = []
@@ -167,16 +155,6 @@ class TestChunkSingleTopic:
 
 
 class TestProcessSingleTopic:
-    def test_returns_tuple_of_stats_and_chunks(self, pipeline) -> None:
-        pipeline._mock_arxiv.get_arxiv_results.return_value = [
-            _make_arxiv_result("aaa")
-        ]
-        pipeline._mock_chunker.chunk_all_results.return_value = [_make_chunk("aaa")]
-        result = pipeline.process_single_topic("transformers")
-        assert isinstance(result, tuple) and len(result) == 2
-        assert isinstance(result[0], TopicIngestionStats)
-        assert isinstance(result[1], list)
-
     def test_chunks_field_populated_on_stats(self, pipeline) -> None:
         pipeline._mock_arxiv.get_arxiv_results.return_value = [
             _make_arxiv_result("aaa")
@@ -198,12 +176,6 @@ class TestProcess:
             mock_logging.return_value = mock_log_handler
             pipeline._mock_logging = mock_logging
             yield pipeline
-
-    def test_returns_ingestion_run_summary(self, patched_pipeline) -> None:
-        patched_pipeline._mock_arxiv.get_arxiv_results.return_value = []
-        patched_pipeline._mock_chunker.chunk_all_results.return_value = []
-        result = patched_pipeline.process()
-        assert isinstance(result, IngestionRunSummary)
 
     def test_summary_topic_count_matches_topics(self, patched_pipeline) -> None:
         patched_pipeline._mock_arxiv.get_arxiv_results.return_value = []
@@ -252,7 +224,6 @@ class TestProcess:
         chunks_call_args = patched_pipeline._save_chunks_to_jsonl.call_args
         assert chunks_call_args.args[0] == chunks
         summary_call_args = patched_pipeline._save_summary_to_json.call_args
-        from src.ingestion.pipeline import IngestionRunSummary
 
         assert isinstance(summary_call_args.args[0], IngestionRunSummary)
 

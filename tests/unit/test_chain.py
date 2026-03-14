@@ -175,14 +175,15 @@ class TestGenerate:
         with pytest.raises(ValueError, match="Unknown prompt_version"):
             chain.generate("query", sample_chunks, prompt_version="bad_version")
 
-    def test_thinking_config_is_passed(
+    def test_thinking_config_level_is_low(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
-        """ThinkingConfig must be forwarded to the model — it was added in v2."""
+        """ThinkingConfig(thinking_level='low') must be forwarded — added in v2."""
         chain.generate("Any question?", sample_chunks)
         call_kwargs = chain._mock_client.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert config.thinking_config is not None
+        assert config.thinking_config.thinking_level.value == "LOW"
 
     def test_temperature_matches_config_setting(
         self, chain: RAGChain, sample_chunks: list[dict]

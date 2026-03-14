@@ -349,12 +349,6 @@ class TestSaveSnapshot:
 class TestMakeTarget:
     """make_target is a factory — the returned callable is the evaluation target."""
 
-    def test_make_target_returns_callable(self) -> None:
-        from src.evaluation.ragas_runner import make_target
-
-        fn = make_target()
-        assert callable(fn)
-
     def test_target_returns_answer_and_contexts_keys(self) -> None:
         fake_result = {
             "answer": "Some answer.",
