@@ -224,6 +224,33 @@ Full analysis: [V2-HYBRID-RERANK-ANALYSIS.md](evaluation/results/v2-hybrid-reran
 
 Full analysis: [V2-HYBRID-RERANK-ANALYSIS-v2.md](evaluation/results/v2-hybrid-rerank-v2/V2-HYBRID-RERANK-ANALYSIS-v2.md)
 
+### Prompt A/B Test — v1 vs v2 system prompt (2026-03-14)
+
+**Held constant:** retrieval pipeline, model, eval set (41 questions)
+
+**v1 prompt:** Minimal — "answer based on context only, say don't know if insufficient."
+
+**v2 prompt:** Structured rules — direct answering (no hedging phrases), inline citations `[1][2]`, partial-answer policy (answer what's available, state what's missing).
+
+| Metric | v1 prompt | v2 prompt | Delta |
+|---|---|---|---|
+| **Faithfulness** | 0.9753 | 0.9628\* | -0.013 |
+| **Answer Relevancy** | 0.8726 | **0.9004** | **+0.028** |
+| **Context Precision** | 0.8295 | 0.8212 | -0.008 (noise) |
+| **Context Recall** | 0.8984 | 0.9024 | +0.004 (noise) |
+
+\*One evaluator timeout on q_005 forced a 0.0 fallback. Excluding it: v2 faithfulness = **0.987** (+0.012 over v1).
+
+**Findings:**
+- Answer Relevancy gained +0.028 — the direct-answering rule eliminated hedged, indirect responses that RAGAS penalizes
+-Answer structure mproved resulting in more cohesive answers.
+- Faithfulness is net positive once the timeout artifact is removed; structured bullet format exposes more individual claims to verification but they hold up
+- Context Precision/Recall deltas (~0.008) are LLM-as-judge variance — prompt has no effect on retrieval
+
+**v2 prompt adopted as default.**
+
+---
+
 ### Score Delta by Question Type (v1 → v2.2)
 
 ![Score Delta Heatmap](evaluation/results/category_delta_heatmap.png)
