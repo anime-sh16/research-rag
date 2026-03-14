@@ -55,7 +55,7 @@ class IngestionConfig(BaseModel):
 
 
 class GenerationConfig(BaseModel):
-    model: str = "gemini-2.5-flash-lite"
+    model: str = "gemini-3-flash-preview"
     temperature: float = 0.1
     top_k: int = 5
 
@@ -67,14 +67,14 @@ class APIConfig(BaseModel):
 class RetrievalConfig(BaseModel):
     hybrid_prefetch_k: int = 20
     rerank_top_n: int = 5
-    jina_rerank_model: str = "jina-reranker-v2-base-multilingual"
+    jina_rerank_model: str = "jina-reranker-v3"
 
 
 class EvaluationConfig(BaseModel):
     dataset_name: str = "arxiv-rag-eval-set"
     evalset_path: Path = Path("evaluation/evalset.json")
-    results_dir: Path = Path("evaluation/results")
-    evaluator_model: str = "gemini-2.5-flash-lite"
+    results_dir: Path = Path("evaluation/results/v2-hybrid-rerank-v2")
+    evaluator_model: str = "gemini-3-flash-preview"
 
 
 class Settings(BaseSettings):
