@@ -43,18 +43,51 @@ def _is_timeout_error(exc: BaseException) -> bool:
     return False
 
 
-PROMPT_VERSION = "v1-baseline"
+DEFAULT_PROMPT_VERSION = "v2"
 
-SYSTEM_INSTRUCTION = "You are a research assistant. Answer questions based only on the provided context from ArXiv papers. If the context does not contain enough information, say 'I don't have enough information to answer this.'"
-
-PROMPT_TEMPLATE = """Context:
-{context}
-
-Question: {question}"""
+PROMPT_VARIANTS: dict[str, dict[str, str]] = {
+    "v1": {
+        "system": (
+            "You are a research assistant. Answer questions based only on the provided context"
+            " from ArXiv papers. If the context does not contain enough information, say"
+            " 'I don't have enough information to answer this.'"
+        ),
+        "template": "<CONTEXT>\n{context}\n</CONTEXT>\nQuestion: {question}",
+    },
+    "v2": {
+        "system": (
+            "You are an expert ML research assistant specializing in ArXiv papers.\n\n"
+            "Your job is to answer the user's question directly and precisely using only"
+            " the numbered sources provided in <CONTEXT>.\n\n"
+            "Rules:\n"
+            "- Answer directly. Never say 'based on the context', 'according to the context',"
+            " or similar phrases. Just state the facts.\n"
+            "- Cite sources inline using [1], [2], etc. wherever a claim comes from a specific source.\n"
+            "- If multiple sources support a claim, cite all of them. For example: [1][3].\n"
+            "- Answer every part of the question you can. If only partial information is available,"
+            " answer those parts fully and explicitly state what is missing for the rest.\n"
+            "- If the context contains no relevant information at all, say exactly:"
+            " 'I don't have enough information to answer this.' Do not guess or extrapolate."
+            "Output:\n"
+            "A choesive response to the user's query based on the context provided."
+        ),
+        "template": ("<CONTEXT>\n{context}\n</CONTEXT>\n\nQuestion: {question}"),
+    },
+}
 
 
 class RAGChain:
-    def __init__(self, model: str = settings.generation.model):
+    def __init__(
+        self,
+        model: str = settings.generation.model,
+        prompt_version: str = DEFAULT_PROMPT_VERSION,
+    ):
+        if prompt_version not in PROMPT_VARIANTS:
+            raise ValueError(
+                f"Unknown prompt_version '{prompt_version}'. "
+                f"Valid options: {list(PROMPT_VARIANTS)}"
+            )
+        self.prompt_version = prompt_version
         self.client = wrappers.wrap_gemini(
             genai.Client(api_key=settings.google_api_key.get_secret_value()),
             tracing_extra={
@@ -65,6 +98,17 @@ class RAGChain:
             },
         )
         self.model = model
+
+    def _resolve_prompt(self, prompt_version: str | None) -> tuple[str, str, str]:
+        """Return (system_instruction, template) for the given version."""
+        version = prompt_version or self.prompt_version
+        if version not in PROMPT_VARIANTS:
+            raise ValueError(
+                f"Unknown prompt_version '{version}'. "
+                f"Valid options: {list(PROMPT_VARIANTS)}"
+            )
+        variant = PROMPT_VARIANTS[version]
+        return variant["system"], variant["template"], version
 
     def _format_context(self, chunks: list[dict]) -> str:
         parts = []
@@ -96,32 +140,40 @@ class RAGChain:
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
-    def generate(self, query: str, chunks: list[dict]) -> str:
+    def generate(
+        self, query: str, chunks: list[dict], prompt_version: str | None = None
+    ) -> str:
+        system_instruction, template, resolved_version = self._resolve_prompt(
+            prompt_version
+        )
         logger.info(
-            "Generating answer for query: '%s' using %d chunks.", query, len(chunks)
+            "Generating answer for query: '%s' using %d chunks (prompt=%s).",
+            query,
+            len(chunks),
+            resolved_version,
         )
         context = self._format_context(chunks)
-        prompt = PROMPT_TEMPLATE.format(context=context, question=query)
+        prompt = template.format(context=context, question=query)
 
         # Log prompt details to LangSmith
         run = get_current_run_tree()
         if run:
             run.add_metadata(
                 {
-                    "prompt_version": PROMPT_VERSION,
+                    "prompt_version": resolved_version,
                     "full_prompt_sent": prompt,
-                    "system_instruction": SYSTEM_INSTRUCTION,
+                    "system_instruction": system_instruction,
                     "model": self.model,
                     "context_chunks_used": [c.get("paper_id") for c in chunks],
                 }
             )
-            run.add_tags([f"prompt_version:{PROMPT_VERSION}"])
+            run.add_tags([f"prompt_version:{resolved_version}"])
 
         response = self.client.models.generate_content(
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
+                system_instruction=system_instruction,
                 temperature=settings.generation.temperature,
                 thinking_config=types.ThinkingConfig(
                     thinking_level="low",
