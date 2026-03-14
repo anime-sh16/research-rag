@@ -521,6 +521,7 @@
       "answer": "RRHF scores sampled responses by calculating the **length-normalized conditional log probability** of each response under the model being trained ($\\pi$) [1][2].\n\nSpecifically, the process involves:\n*   **Log Probability Calculation:** For a response $y_i$ to a query $x$, the model calculates the sum of the log probabilities of each token $y_{i,t}$ conditioned on the query and preceding tokens [1].\n*   **Length Normalization:** This sum is divided by the length of the response ($||y_i||$) to produce the final score ($p_i$) [1].\n*   **Ranking Alignment:** These scores ($p_i$) are then compared against rewards ($r_i$)\u2014which are derived from human preference labels or a reward model\u2014using a ranking loss to ensure better responses receive higher probabilities [1][4].",
       "reference": "RRHF scores sampled responses based on the length-normalized logarithm of conditional probabilities provided by the training language model.",
       "scores": {
+        "faithfulness": 0.0,
         "answer_relevancy": 0.8907328254426473,
         "context_precision": 0.99999999998,
         "context_recall": 1.0
