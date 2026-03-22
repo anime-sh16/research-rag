@@ -73,7 +73,9 @@ class Retriever:
         )
         self.langsmith_client = Client()
         self.top_k = top_k
+        self.jina_top_n = settings.retrieval.rerank_top_n
         self.prefetch_k = settings.retrieval.hybrid_prefetch_k
+        self.mmr_lambda = settings.retrieval.mmr_lambda
         self._jina_headers = {
             "Authorization": f"Bearer {settings.jina_api_key.get_secret_value()}",
             "Content-Type": "application/json",
@@ -179,16 +181,30 @@ class Retriever:
                 "model": settings.retrieval.jina_rerank_model,
                 "query": query,
                 "documents": [c["text"] for c in candidates],
-                "top_n": self.top_k,
+                "top_n": self.jina_top_n,
+                "return_embeddings": True,
+                "return_documents": False,
             },
             timeout=60,
         )
         response.raise_for_status()
 
         return [
-            {**candidates[r["index"]], "score": r["relevance_score"]}
+            {
+                **candidates[r["index"]],
+                "score": r["relevance_score"],
+                "dense_embedding": r["embedding"],
+            }
             for r in response.json()["results"]
         ]
+
+    @traceable(run_type="tool", name="retrieval/mmr_selection")
+    def _mmr_selection(self, candidates: list[dict], lamda: float = 0.8) -> list[dict]:
+        """
+        Select top-k candidates using Maximal Marginal Relevance (MMR).
+        """
+        # TODO: implenet the MMR selection
+        pass
 
     @traceable(run_type="retriever", name="retrieval/hybrid_search")
     def retrieve(self, query: str) -> list[dict]:
@@ -228,6 +244,8 @@ class Retriever:
         ]
 
         chunks = self._rerank(query, candidates)
+
+        chunks = self._mmr_selection(chunks)
 
         # LangSmith Tracing & Proxy Metrics
         run = get_current_run_tree()
@@ -272,12 +290,6 @@ class Retriever:
                     run_id=run.id,
                     key="source_diversity",
                     score=unique_papers,
-                    trace_id=run.trace_id,
-                )
-                self.langsmith_client.create_feedback(
-                    run_id=run.id,
-                    key="rerank_score_spread",
-                    score=max(scores) - min(scores),
                     trace_id=run.trace_id,
                 )
 

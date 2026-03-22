@@ -65,9 +65,10 @@ class APIConfig(BaseModel):
 
 
 class RetrievalConfig(BaseModel):
-    hybrid_prefetch_k: int = 20
-    rerank_top_n: int = 5
+    hybrid_prefetch_k: int = 30
+    rerank_top_n: int = 10
     jina_rerank_model: str = "jina-reranker-v3"
+    mmr_lambda: float = 0.8
 
 
 class EvaluationConfig(BaseModel):
