@@ -285,6 +285,37 @@ Several questions show answer relevancy shifts that may reflect RAGAS evaluator 
 
 ---
 
+## Cross-Paper Retrieval Deep Dive (2026-03-20)
+
+Targeted investigation of the two cross-paper partial failures using curl API queries with expanded candidate pools (top-50).
+
+### q_029 — AWQ vs Quasar-ViT: **Sub-mode B (post-retrieval fixable)**
+
+| Scope | AWQ chunks | Quasar-ViT chunks |
+|-------|-----------|-------------------|
+| Top-5 (reranked) | 4 | 1 |
+| Top-50 (prefetch) | 9 | 19 |
+
+**Diagnosis:** Both papers are well-represented in the candidate pool. AWQ dominates top-5 because the reranker scores AWQ chunks higher for this query. Quasar-ViT has 19 chunks available — ample material that gets squeezed out by reranking. A post-retrieval source diversity mechanism (conditional, to avoid degrading single-source queries) can promote additional Quasar-ViT chunks into the final top-5.
+
+### q_032 — Pruning-vs-Quantization + QServe: **Vocabulary mismatch (not post-retrieval fixable)**
+
+| Scope | PvQ chunks | QServe chunks |
+|-------|-----------|---------------|
+| Top-5 (reranked) | 5 | 0 |
+| Top-50 (prefetch) | 11 | 1 |
+| Total ingested | — | 55 (10+ mention SmoothAttention) |
+
+**Diagnosis:** QServe has 55 chunks in the collection with 10+ mentioning "SmoothAttention," yet only 1 surfaces in top-50. This is a vocabulary mismatch: the query uses Pruning-vs-Quantization language ("heavy-tailed distributions," "quantization superior to pruning") while QServe uses entirely different terminology ("SmoothAttention," "outlier channels," "activation quantization keys"). Both dense embeddings and BM25 strongly prefer PvQ's vocabulary. Post-retrieval diversity cannot fix this — needs query decomposition or HyDE to bridge the terminology gap.
+
+### Implication for fix strategy
+
+These are two distinct problems requiring separate solutions:
+- **q_029:** Conditional post-retrieval source diversity (lower complexity, tackling first)
+- **q_032:** Query decomposition or HyDE to bridge vocabulary gap (separate iteration)
+
+---
+
 ## Final Assessment
 
 **v2.2-hybrid-rerank-v2 represents a major step forward, driven primarily by the LLM upgrade.** Faithfulness crossed 0.97, answer relevancy crossed 0.87, and only 3 DK answers remain (down from 8 in v1).
