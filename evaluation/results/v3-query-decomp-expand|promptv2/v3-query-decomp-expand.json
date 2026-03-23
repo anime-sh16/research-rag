@@ -1,0 +1,585 @@
+{
+  "experiment": "v3-query-decomp-expand|promptv2",
+  "timestamp": "2026-03-23T23:47:56.974271",
+  "pipeline_version": "v3-query-decomp-expand|promptv2",
+  "aggregate": {
+    "faithfulness": 0.9507,
+    "answer_relevancy": 0.8742,
+    "context_precision": 0.8336,
+    "context_recall": 0.9208
+  },
+  "per_question": [
+    {
+      "id": "q_041",
+      "question": "In the communication analysis of the Cascade multi-party inference protocol, what is the exact theoretical formula used to calculate the total single-layer communication byte overhead, denoted as CommBytes?",
+      "question_type": "numerical",
+      "question_subtype": "formula",
+      "answer": "The exact theoretical formula used to calculate the total single-layer communication byte overhead in the Cascade protocol is:\n\n$$CommBytes = \\beta F(2dH + 2dHKV + 2H) \\cdot N$$ [1]",
+      "reference": "The exact theoretical formula for the single-layer communication byte overhead is CommBytes = \u03b2F (2dH + 2dHKV + 2H) \u00b7 N.",
+      "scores": {
+        "faithfulness": 0.6666666666666666,
+        "answer_relevancy": 0.9261522386801645,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_040",
+      "question": "In the heterogeneous multi-agent self-attention (HMSA) module of the V2X-ViT model, what is the exact mathematical formula used to compute the message representation from a neighboring agent, denoted as headmMSG (i, j)?",
+      "question_type": "numerical",
+      "question_subtype": "formula",
+      "answer": "The exact mathematical formula used to compute the message representation from a neighboring agent in the HMSA module is:\n\n$$\\text{head}^m_{\\text{MSG}}(i, j) = \\text{Dense}^m_{c_j}(H_j) \\mathbf{W}^{m,\\text{MSG}}_{\\phi(e_{ij})}$$\n\nIn this formula:\n*   **$m$** is the current head number [1][2].\n*   **$c_j$** represents the node type of the neighboring agent $j$ [2][3].\n*   **$H_j$** is the feature map of the neighboring agent $j$ [2].\n*   **$\\text{Dense}^m_{c_j}$** is a linear projector indexed by both the node type and the head number [2].\n*   **$\\mathbf{W}^{m,\\text{MSG}}_{\\phi(e_{ij})}$** is a weight matrix used to project the features based on the edge type $\\phi(e_{ij})$ between the source node $j$ and target node $i$ [1][2].",
+      "reference": "The exact formula used to compute the message from a neighboring agent is headmMSG (i, j) = Densemcj (Hj)W m,MSG \u03d5(eij).",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8718357033738476,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_039",
+      "question": "During the scalability testing for the Cascade protocol configured with \u03b1 = 2 and no m-splitting, what is the mean runtime in seconds for a single 128-token prompt forward pass on the Llama-2-13B model?",
+      "question_type": "numerical",
+      "question_subtype": "throughput",
+      "answer": "I don't have enough information to answer this. While the provided context includes scalability testing for Cascade with $\\alpha = 2$ and no m-splitting, the results in Table 8 only cover Bert-Base (110M), Bert-Large (335M), and Llama-3.2-1B-Instruct (1B) [1]. There is no mention of a Llama-2-13B model in the Cascade performance or scalability data [1][2][3].",
+      "reference": "The mean runtime for a single 128-token prompt forward pass on the Llama-2-13B model is 22.72 seconds.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.0,
+        "context_recall": 0.0
+      }
+    },
+    {
+      "id": "q_038",
+      "question": "In the zero-shot evaluation for Arabic tasks, what is the exact average score achieved by the instruction-tuned Jais-chat (6.7B) model?",
+      "question_type": "numerical",
+      "question_subtype": "benchmark-result",
+      "answer": "The instruction-tuned Jais-chat (6.7B) model achieved an average score of 46.4% in the zero-shot evaluation for Arabic tasks [1].",
+      "reference": "The exact average score achieved by the Jais-chat (6.7B) model is 46.4.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9919829246317377,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_037",
+      "question": "What is the exact inference time measured on a GPU Tesla V100 for the V2X-ViTS model?",
+      "question_type": "numerical",
+      "question_subtype": "throughput",
+      "answer": "The inference time for the V2X-ViTS model measured on a GPU Tesla V100 is 28ms [1][2].",
+      "reference": "The exact inference time for the V2X-ViTS model is 28ms.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9945439287659416,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_036",
+      "question": "What specific problem arises when aggregating multiple LLM outputs at the token level, and why is this fine-grained approach still considered more effective than response-level ensemble methods?",
+      "question_type": "multi-hop",
+      "question_subtype": "taxonomy-to-limitation",
+      "answer": "The specific problem encountered when aggregating multiple LLM outputs at the token level is the **vocabulary discrepancy** across different models [2]. Because different LLMs produce varying embedding lengths and use different dictionaries, it is difficult to fuse and average their probability distributions [2]. To address this, researchers must use techniques such as constructing a \"union dictionary\" to merge vocabularies or projecting distributions into a shared relative/pivot space [2].\n\nDespite these obstacles, token-level ensemble methods are considered more effective than response-level methods for the following reasons:\n*   **Information Utilization:** Finer-grained methods can more effectively harness the distribution information from each model during the decoding phase [1].\n*   **Performance Potential:** Because they are unconstrained by cost considerations, these methods can employ more flexible ensemble strategies and utilize finer granularity, which yields greater potential for performance improvement [1].\n*   **Granularity:** Token-level ensemble is the most granular form of ensemble, integrating outputs at the finest level of decoding compared to the relatively \"coarse-grained\" response-level methods [1][4].",
+      "reference": "Token-level aggregation faces the dilemma of vocabulary discrepancies across different LLMs, which produce varying embedding lengths and impede the fusion of probability distributions. However, it is still considered more effective than coarse-grained response-level methods because it can harness the distribution information from each individual model directly during the decoding phase.",
+      "scores": {
+        "faithfulness": 0.8666666666666667,
+        "answer_relevancy": 0.9733391894803184,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_035",
+      "question": "How does the plan generation approach of the LLM-profiled planner in a base workflow fundamentally differ from search workflows, and what specific type of task does this base workflow approach struggle to handle?",
+      "question_type": "multi-hop",
+      "question_subtype": "taxonomy-to-limitation",
+      "answer": "The plan generation approach of the LLM-profiled planner in a base workflow differs from search workflows in the following ways:\n\n*   **Generation Method:** The base workflow uses a planner ($glm_{planner}$) to greedily generate a static plan in a single inference step [1]. In contrast, search workflows explore multiple potential solutions and support backtracking, which allows for a more robust exploration of different options [1].\n*   **Execution and Flexibility:** Plans generated by the base workflow (as well as BFS, DFS, and Beam Search) are intended for full execution [1]. However, in stochastic decision-making environments, this can lead to unexecutable actions if a prior action leads to a state where the next planned action is invalid [1].\n\n**Task Difficulty:**\nThe greedy generation approach used in the base workflow struggles to handle **long-horizon plans for complex tasks** [1]. Additionally, zero-shot Chain-of-Thought (CoT) implementations for planner profiling often fail to produce these long-horizon plans [1].",
+      "reference": "The LLM planner in a base workflow greedily generates a static sequence of actions in a single inference step, whereas search workflows explore multiple potential solutions and support backtracking. Because of this greedy, single-step generation, the base workflow approach frequently struggles with long-horizon plans for complex tasks.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9560703873905579,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_034",
+      "question": "How does the fundamental Markov chain process of Diffusion Probabilistic Models operate in both directions, and what specific objective metric is recommended for evaluating the fidelity of the videos they might generate?",
+      "question_type": "multi-hop",
+      "question_subtype": "architecture-to-evaluation",
+      "answer": "The fundamental Markov chain process of Diffusion Probabilistic Models (DPMs) operates through two opposite directions:\n\n*   **Forward Direction (Diffusion Process):** This process gradually adds noise to clean data (such as an image $x_0$) over a finite number of steps $T$ [1][2]. It is defined as a Markov chain where each step $q(x_t|x_{t-1})$ is typically parameterized as a Gaussian distribution $N(x_t; \\sqrt{1-\\beta_t}x_{t-1}, \\beta_tI)$, where $\\beta_t$ represents noise variance hyperparameters [2][3][5]. This continues until the original data is destroyed and transformed into a non-informative noisy distribution [1][2].\n*   **Reverse Direction (Denoising Process):** This generative process aims to remove the noise added during the forward steps to recover the actual data [1]. It begins from a noise vector $x_T$ and transitions back toward the original data distribution $q(x_0)$ [3]. The model parameterizes these reverse transitions $p_\\theta(x_{t-1}|x_t)$ as normal distributions where the mean and variance are learned by a neural network, such as a UNet [3][5].\n\nI don't have enough information to answer what specific objective metric is recommended for evaluating the fidelity of the videos they might generate. The provided text focuses on image synthesis, general generative theory, and detection of generated images, but it does not mention video-specific evaluation metrics.",
+      "reference": "The Markov chain in Diffusion Probabilistic Models operates forward by gradually adding noise to data at each step, and backward (inverse process) by removing the noise to recover the actual data from a noisy distribution. If evaluating videos generated by such models, the Frechet Video Distance (FVD) metric is designed to measure their fidelity.",
+      "scores": {
+        "faithfulness": 0.9375,
+        "answer_relevancy": 0.0,
+        "context_precision": 0.699999999965,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_033",
+      "question": "How is the internal reward for appraisal-based reward modifications mathematically formulated in RL agents, and what was the primary empirical result of Sequeira et al.'s implementation of this concept in a resource-predator task?",
+      "question_type": "multi-hop",
+      "question_subtype": "method-to-result",
+      "answer": "The internal reward for appraisal-based reward modifications ($r^\\triangle_t$) is mathematically formulated as a weighted sum of $J$ appraisal variables ($\\zeta_j$):\n\n$$r^\\triangle_t = \\sum_{j=1}^{J} \\phi_j \\zeta_j(g_t)$$\n\nIn this formulation, $\\phi_j$ represents the weight of the $j$-th appraisal dimension, and $\\zeta_j(g_t)$ represents the appraisal variable derived from the agent-environment interaction history $g_t$ [1][2]. These appraisal variables are domain-independent characteristics such as novelty, recency, or motivational relevance [1][5].\n\nRegarding the primary empirical result of Sequeira et al.'s implementation, the provided text states that their work (2011) showed how incorporating these appraisal dimensions as extra reward provides better task achievement compared to non-intrinsically motivated agents [5]. However, the text does not provide specific details regarding the results of a \"resource-predator task,\" as it notes that the empirical results of those papers are discussed more systematically in a different section (Section 7) not fully included in the context [2][4].",
+      "reference": "The internal reward for appraisal-based modifications is formulated as the sum of weighted appraisal dimensions: r^delta_t = sum of phi_j * zeta_j(g_t) for J appraisal variables. When Sequeira et al. implemented this in a resource-predator task, the main result was an improved average fitness compared to a non-appraisal baseline agent.",
+      "scores": {
+        "faithfulness": 0.9,
+        "answer_relevancy": 0.9146468417106314,
+        "context_precision": 0.99999999995
+      }
+    },
+    {
+      "id": "q_032",
+      "question": "In what way do heavy-tailed data distributions alter the general consensus that quantization is superior to pruning, and how do systems designed for low-bit quantization attempt to resolve this vulnerability?",
+      "question_type": "cross-paper",
+      "question_subtype": "field-intersection",
+      "answer": "Heavy-tailed distributions, characterized by high sample kurtosis and significant outliers, shift the performance trade-off between quantization and pruning. While quantization generally outperforms pruning, its signal-to-noise ratio (SNR) is greatly reduced by outliers because they force the quantization grid to increase in size, leading to higher rounding errors [1][3]. In contrast, pruning is hardly affected by outliers because it primarily targets weights around zero [1][3].\n\n### Impact of Heavy-Tailed Distributions\n*   **Performance Shift:** In distributions with heavy tails (simulated using a Student\u2019s-t distribution), pruning becomes preferable to quantization at high compression ratios, specifically in regions of high clipping ranges and very high compression rates, such as 2\u20133 bits per value [1][2].\n*   **Predictive Metrics:** Sample kurtosis serves as a predictive measure for this trade-ability; as kurtosis increases, the probability of encountering a tensor where pruning has a higher SNR than quantization also increases [1][2].\n*   **General Consensus:** Despite the impact of outliers, quantization still maintains a higher SNR in most cases for moderate compression [2]. Pruning only tends to perform better in rare cases of extreme compression that often result in significant performance drops [4].\n\n### Systems Designed to Resolve Vulnerabilities\nSystems designed for low-bit quantization (particularly 2-bit) attempt to resolve the accuracy degradation caused by outliers and sensitive weights through several specialized strategies:\n\n*   **Decoupling Parameters:** The **decoupleQ** system abandons traditional heuristic methods (like manual outlier handling) by decoupling model parameters into integer and floating-point parts, treating quantization as a mathematical constrained optimization problem [5].\n*   **Mixed-Precision and Non-Uniform Schemes:** Systems like **SpQR** and **SqueezeLLM** use mixed-precision or non-uniform quantization to safeguard important or \"salient\" channels, though these require customized hardware support [5].\n*   **Distribution Fitting:** **N2UQ** fits real-value distributions with non-uniform grids before quantizing them into equidistant levels, while **QuIP** uses random orthogonal matrices to de-quantize weights, pushing the accuracy limits of 2-bit quantization [5].\n*   **Heuristic Adjustments:** Traditional paradigms attempt to mitigate these issues by determining specific clipping ranges or identifying sensitive channels to manage the quantization grid more effectively [5].",
+      "reference": "\"Pruning vs Quantization\" demonstrates that while quantization is generally superior, pruning becomes the more accurate compression method for tensors with high kurtosis (heavy tails) because significant outliers drastically expand and degrade the necessary quantization grid, whereas pruning only removes values near zero. To prevent this vulnerability to outliers when deploying quantized LLMs, \"QServe\" introduces techniques like \"SmoothAttention,\" which explicitly suppresses heavy-tailed activation outliers in Key caches by scaling down those specific channels, artificially creating a distribution more amenable to strict low-bit quantization grids.",
+      "scores": {
+        "faithfulness": 0.896551724137931,
+        "answer_relevancy": 0.9545120638984207,
+        "context_precision": 0.9999999999666667,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_031",
+      "question": "What specific type of hallucination remains a significant error bottleneck in RAG pipelines even when correct documents are successfully retrieved, and how does this align with the broader categorization of generative errors?",
+      "question_type": "cross-paper",
+      "question_subtype": "field-intersection",
+      "answer": "Even when correct documents are successfully retrieved, **Generation Failure** (specifically the \"faithfulness problem\") remains a significant error bottleneck, accounting for 31.0% of failures in some datasets [1]. This occurs when the correct evidence is passed to the generator, but the model still produces a flawed answer [1].\n\n### Specific Types of Generation Hallucinations\nWhen correct evidence is present, these failures manifest as:\n*   **Incorrect Entity Selection:** Choosing the wrong entity from a list of candidates provided in the evidence [1].\n*   **Flawed Logical Inference:** Failing to perform comparative reasoning (e.g., \"who is younger?\") or misinterpreting complex relationships, such as genealogical data [1].\n*   **Misinterpretation of Granularity:** Providing a specific answer (e.g., a year) when the request required a broader category (e.g., a decade) [1].\n*   **Internal Knowledge Interference:** The LLM may introduce erroneous details from its own internal knowledge that were not part of the retrieved data [2][3]. This is often driven by \"comprehension bias,\" where indirect information in retrieved paragraphs misguides the model [2].\n\n### Alignment with Broader Generative Errors\nThese failures align with a broader two-part categorization of hallucinations in Large Language Models:\n1.  **Faithfulness:** When the generated text is not faithful to the provided input context [5]. This is the primary issue in RAG pipelines where the retriever has functioned correctly but the generator fails to ground its response in the provided documents [3][4].\n2.  **Factualness:** When the generated text is not factually correct with respect to world knowledge [5].\n\nIn the context of RAG architectural failures, these generative issues are distinct from **Retrieval-related failures** (e.g., obscure facts) and **Architectural failures** (e.g., Strategic Evidence Assessment errors or Query Decomposition errors) [1]. To mitigate these specific entity-level hallucinations, researchers have proposed reinforcement mechanisms that steer models to rely strictly on retrieved inputs rather than internal knowledge [4].",
+      "reference": "According to \"Factuality Challenges in the Era of Large Language Models,\" LLM hallucinations can be categorized into \"factualness\" (incorrect world knowledge) and \"faithfulness\" (failing to adhere to the input context). \"FAIR-RAG\" demonstrates that even when a RAG pipeline resolves the factualness problem by successfully retrieving the correct external evidence, the system still suffers a 31% \"Generation Failure\" error rate because modern LLMs inherently struggle to remain faithfully grounded to that provided context.",
+      "scores": {
+        "faithfulness": 0.9444444444444444,
+        "answer_relevancy": 0.634890894243352,
+        "context_precision": 0.699999999965,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_030",
+      "question": "How does the mechanism used by Self-RAG to evaluate the necessity of invoking a retrieval tool differ from how CATP-LLM assesses the utility of appending an external tool to its execution plan?",
+      "question_type": "cross-paper",
+      "question_subtype": "method-contrast",
+      "answer": "Self-RAG and CATP-LLM utilize different mechanisms and timing for evaluating tool utility:\n\n**Self-RAG Mechanism**\nSelf-RAG evaluates the necessity of retrieval through the use of **reflection tokens** [1][4]. The model is specifically trained to generate these special tokens to determine the necessity of retrieval, evaluate the relevance of retrieved passages, and critique the factual veracity of its own generations [1]. This evaluation happens in an **inline fashion** during generation, assessing evidence on a step-by-step basis as the answer is being composed [4].\n\n**CATP-LLM Mechanism**\nCATP-LLM assesses tool utility through a **cost-aware tool planning** framework that balances plan performance against execution costs [2]. Unlike Self-RAG's reflection tokens, CATP-LLM uses:\n*   **Continuous Evaluation:** It enables the LLM to evaluate plan costs **each time a decision is made** during the planning process, rather than waiting until a plan is fully generated [3].\n*   **Unified Metrics:** It utilizes a metric called **Quality of Plan (QoP)** to quantitatively evaluate the utility of a tool based on both its performance and its execution costs [2].\n*   **Non-sequential Planning:** It uses the **TPL language** and the **CAORL algorithm** to devise plans that can include parallel execution to reduce time and costs [2][3].\n\nWhile Self-RAG's mechanism is focused on the tactical relevance and factual support of retrieved evidence during text generation [4], CATP-LLM's mechanism is focused on optimizing the efficiency and validity of a multi-tool execution plan [2][3].",
+      "reference": "According to \"Engineering the RAG Stack,\" the Self-RAG framework determines the necessity of invoking a retrieval tool by generating specific reflection tokens to autonomously critique its own generation states and confidence. Conversely, the \"CATP-LLM\" framework decides whether to use a tool by relying on a cost-aware offline reinforcement learning policy that evaluates fine-grained intermediate feedback, carefully weighing the tool's execution costs (like memory and time) against its predicted contribution to task performance.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9298714478170677,
+        "context_precision": 0.0,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_029",
+      "question": "Why does AWQ intentionally leave activations unquantized during inference, and how does this contrast with Quasar-ViT's treatment of activations for FPGA acceleration?",
+      "question_type": "cross-paper",
+      "question_subtype": "tradeoff-comparison",
+      "answer": "AWQ intentionally leaves activations unquantized because it is a weight-only quantization method designed to reduce the memory footprint of LLMs while maintaining hardware friendliness [1]. The method relies on the observation that weight channels corresponding to larger activation magnitudes are more \"salient\" and process more important features [1]. By scaling these salient weight channels based on the activation distribution, AWQ reduces their relative quantization error without requiring the hardware-inefficient mixed-precision implementation that would result from keeping some weights in FP16 [1][2]. To maintain efficiency during inference, AWQ uses a framework called TinyChat that performs on-the-fly dequantization of weights to match the precision of the activations [1].\n\nIn contrast, Quasar-ViT explicitly quantizes activations to enable efficient FPGA acceleration [3]. While AWQ focuses on weight-only quantization, Quasar-ViT implements hardware-oriented quantization that uses 6-bit activations [3][4]. This treatment of activations allows for specific hardware optimizations, such as hybrid signed/unsigned DSP packing, where multiple 4-bit weights can share 6-bit activations to maximize the throughput of the FPGA's digital signal processing (DSP) units [3][4]. Unlike AWQ's focus on preserving generalization by avoiding activation quantization, Quasar-ViT integrates activation quantization into its architecture search to find the most accurate model under specific hardware latency and resource constraints [3].",
+      "reference": "According to the AWQ paper, activations are kept in 16-bit precision (W4A16) because LLM token generation is primarily bottlenecked by memory bandwidth during weight loading, making weight-only quantization the most effective way to increase arithmetic intensity. Conversely, Quasar-ViT quantizes activations down to 6 bits to maximize raw compute density on FPGAs, enabling hybrid DSP packing schemes where a single DSP block can execute multiple multiplications simultaneously by sharing the 6-bit activation across multiple low-bit weights.",
+      "scores": {
+        "faithfulness": 0.8235294117647058,
+        "answer_relevancy": 0.9301208604669279,
+        "context_precision": 0.32499999998375,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_028",
+      "question": "How do AWQ and Quasar-ViT differently avoid the hardware inefficiency typically associated with executing mixed-precision quantization across different neural network channels?",
+      "question_type": "cross-paper",
+      "question_subtype": "method-contrast",
+      "answer": "AWQ and Quasar-ViT utilize different strategies to avoid hardware inefficiency in mixed-precision quantization:\n\n*   **AWQ (Activation-aware Weight Quantization):** This method avoids hardware inefficiency by using **per-channel scaling** to reduce quantization errors in salient weights [5]. Instead of keeping important weights in high-precision formats (like FP16), which would create hardware overhead, it applies scaling factors to protect these weights while maintaining a uniform quantization format [5].\n*   **Quasar-ViT:** This framework employs a **row-wise flexible mixed-precision quantization** scheme [1][4]. It quantizes different channels within each layer into lower and higher bit-widths but maintains hardware uniformity through a **model-adaptive FPGA design** [2]. This design uses 4-bit atomic computation units and hybrid signed/unsigned DSP packing to set basic hardware units for lower-bit computation, while decomposing higher-bit computations into lower-bit ones to reuse the same resources [2]. Unlike prior works that used fixed mixed-precision ratios across layers, Quasar-ViT allows flexible ratios for better accuracy while preserving the hardware-friendly nature of intra-layer quantization [1][2].",
+      "reference": "AWQ avoids hardware-inefficient mixed-precision data types entirely by uniformly quantizing all weights to the same bit-width, compensating for the quantization loss by mathematically scaling up salient weight channels prior to quantization. Quasar-ViT, on the other hand, actively deploys a mixed-precision scheme (4-bit and 8-bit) but maintains hardware uniformity on FPGAs by standardizing processing elements around 4-bit atomic computations, dynamically decomposing any 8-bit weight operations into two distinct 4-bit operations.",
+      "scores": {
+        "faithfulness": 0.6153846153846154,
+        "answer_relevancy": 0.951390897383297,
+        "context_precision": 0.249999999975,
+        "context_recall": 0.5
+      }
+    },
+    {
+      "id": "q_027",
+      "question": "Why do standard alignment pipelines for language models typically require an initial supervised fine-tuning phase, and what specific limitation of SFT does the subsequent reinforcement learning from human feedback phase aim to resolve?",
+      "question_type": "cross-paper",
+      "question_subtype": "method-contrast",
+      "answer": "Standard alignment pipelines typically require an initial supervised fine-tuning (SFT) phase for the following reasons:\n\n*   **Instruction Following:** SFT optimizes a pretrained model to follow natural language instructions by predicting the most likely next token in a sequence using high-quality prompt-response pairs [4][5].\n*   **Establishing a Policy:** It yields an initial policy ($\\pi_{SFT}$) that can take a prompt as input and output a completion, which serves as the foundation for subsequent alignment steps [2][4].\n*   **Stability and Convergence:** In pipelines like Direct Preference Optimization (DPO), an initial SFT stage on \"good\" example responses is used to establish a robust initial policy, which stabilizes subsequent refinement and improves final alignment outcomes [3].\n\nThe subsequent reinforcement learning from human feedback (RLHF) phase aims to resolve the limitation of **superficial alignment**. While SFT can change a model's surface behavior (such as tone and style), it may fail to impart a deeper understanding or align with complex user preferences [1]. RLHF is designed to deeply adjust model behavior to meet nuanced human preferences\u2014such as helpfullness and factuality\u2014that are difficult to capture through simple instruction-answer pairs alone [1]. Additionally, RLHF allows the model to be optimized using a learned reward function that approximates human intent more closely than the maximum likelihood estimation used in SFT [4].",
+      "reference": "According to the Instruction Tuning survey, an initial SFT phase is required because training a reinforcement learning algorithm directly from a raw base model is too difficult, making SFT necessary to establish a capable initial policy. However, the RLHF survey notes that SFT alone is generally insufficient because the limited size and diversity of supervised data often leads to overfitting and poor generalization. The subsequent RLHF phase resolves this limitation by utilizing more diverse preference data to help the model learn a more robust, generalizable objective.",
+      "scores": {
+        "faithfulness": 0.8461538461538461,
+        "answer_relevancy": 0.9443183645189063,
+        "context_precision": 0.0,
+        "context_recall": 0.6666666666666666
+      }
+    },
+    {
+      "id": "q_026",
+      "question": "Why do Retrieval-Augmented Generation architectures inherently expand the trust and safety vulnerability surface compared to monolithic large language models, and what new failure modes emerge across the extended pipeline?",
+      "question_type": "multi-hop",
+      "question_subtype": "taxonomy-to-limitation",
+      "answer": "Retrieval-Augmented Generation (RAG) architectures expand the trust and safety vulnerability surface because their multi-component nature introduces complex interactions between retrieval mechanisms, knowledge base curation, information synthesis, and generation processes [1]. Unlike monolithic models, where trust issues primarily concentrate on generator hallucinations and bias, RAG systems incorporate additional trust dimensions upstream in the retriever and knowledge base, as well as downstream in citation and attribution methods [1].\n\nNew failure modes and vulnerabilities emerge across four critical layers of the extended pipeline:\n\n**1. Knowledge Base Layer**\n*   **Vulnerabilities:** Susceptible to data poisoning, where malicious actors inject harmful or misleading information into external sources [1][5]. It also faces risks from outdated or absent knowledge and biases in structural curation [1].\n*   **Attack Vectors:** Corpus poisoning (e.g., the BadRAG or Phantom frameworks) can achieve high success rates with minimal malicious passages while remaining difficult to detect [5].\n\n**2. Retriever Layer**\n*   **Vulnerabilities:** Susceptible to hostile queries that exploit ranking algorithms or exacerbate source bias [1]. \n*   **Failure Modes:** \n    *   **Missing Content:** Failure to locate pertinent information already present in the knowledge base [2].\n    *   **Poor Ranking:** Pertinent documents are retrieved but incorrectly prioritized, providing suboptimal context [2].\n    *   **Index Staleness:** High-frequency failure where the index is not updated according to the volatility of information [2].\n    *   **Query Misinterpretation:** High-severity failure in processing the user's intent [2].\n\n**3. Reasoning and Generation Layer**\n*   **Reasoning Misalignment:** Occurs when the model's reasoning trajectory deviates from the evidential constraints of the retrieved data [3]. This includes:\n    *   **Relevance Assessment Failures:** Selecting off-topic documents [3].\n    *   **Query-Evidence Mapping Failures:** Weak causal connections between queries and evidence [3].\n    *   **Evidence-Integrated Synthesis Failures:** Logical inconsistencies or contradictory conclusions when combining evidence [3].\n*   **Generation Quality:** Issues such as \"context ignoring\" or hallucinations triggered by token truncation and nonsensical input [1][3].\n\n**4. Citation and Attribution Layer**\n*   **Vulnerabilities:** Introduces risks of provenance distortion and source attribution fraud [1][5].\n*   **Failure Modes:** Responses may be incorrectly associated with unverifiable or malevolent sources, making detection extremely difficult and resulting in a critical business impact [1][5].",
+      "reference": "Monolithic LLMs primarily suffer from localized trust issues revolving around generator-side hallucinations and parametric bias. RAG architectures, by design, connect the generator to external, non-parametric systems, which significantly expands the vulnerability surface across multiple interacting layers. Because a RAG system relies on external evidence to ground its generation, new failure modes emerge upstream in the pipeline. The Knowledge Base becomes a vector for \"data poisoning\" (where malicious actors inject harmful documents) and structural curation biases. The Retriever layer introduces vulnerabilities where adversarial prompt injections can manipulate similarity algorithms to surface malicious or biased sources over factual ones. Downstream, the Citation layer presents the risk of provenance distortion, where the system might falsely attribute generated hallucinations to real, credible sources, giving dangerous outputs an unearned veneer of authenticity. Finally, the integration between these components introduces \"reasoning misalignment,\" where the generator might retrieve perfect evidence but logically fail to map that evidence to the user's query, resulting in conclusions that actively contradict the retrieved context.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.953604155956301,
+        "context_precision": 0.94999999997625,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_025",
+      "question": "What is the rationale behind decoupling reward modeling from policy training in traditional RLHF, and what inherent challenges does this separation introduce during the policy optimization phase?",
+      "question_type": "multi-hop",
+      "question_subtype": "design-rationale-to-limitation",
+      "answer": "The rationale for decoupling reward modeling from policy training in traditional Reinforcement Learning from Human Feedback (RLHF) includes several conceptual and practical benefits, while the separation introduces specific challenges during policy optimization.\n\n### Rationale for Decoupling\n*   **Direct Application of Supervised Learning:** The decomposition allows for the direct use of supervised learning techniques to train the reward model [1].\n*   **Isolated Evaluation:** It enables the reward model to be evaluated and refined in isolation from the policy training process [1].\n*   **Semi-Supervised Learning:** This structure naturally leads to a form of semi-supervised learning. The agent can use labeled episodes to train the reward model while leveraging unlabeled episodes to explore the environment and refine its behavior [1].\n*   **Asynchronous Learning:** The reward learning process can happen fully asynchronously [2]. The agent can continue its learning process while awaiting human input, which is considered key for practicality and efficiency [1].\n*   **Scalability:** It avoids the requirement for synchronous human-agent interaction, meaning humans do not need to provide continuous supervision [1].\n\n### Inherent Challenges during Policy Optimization\n*   **Objective Discrepancy:** There is a discrepancy between the objective function used in reward learning (e.g., maximum likelihood based on preferences) and how the learned rewards are actually used to train an RL agent [4].\n*   **Suboptimal Policies:** Because the learned reward function is used to train the agent rather than directly comparing trajectories, this discrepancy can lead to the development of suboptimal policies [4].\n*   **Assumption of Optimality:** The reward model is tacitly assumed to induce the same optimal policy as the true reward function, which may not always hold true [4].\n*   **Signal Quality:** The policy optimization step (often using algorithms like Proximal Policy Optimization) relies entirely on the signal provided by the reward model, which is an approximation of difficult-to-specify goals [3]. If the reward model is not high-quality, it affects the final policy [5].",
+      "reference": "Traditional RLHF separates the learning process into an initial reward modeling phase and a subsequent policy training phase. The rationale for this design is that it allows practitioners to apply standard, well-understood supervised learning techniques directly to the reward model and enables the isolated evaluation of the reward function's accuracy. It also facilitates semi-supervised learning, where limited human-labeled data trains the reward model, which then automatically scores vast amounts of unlabeled data for the policy to explore. However, this decoupling introduces significant challenges during policy optimization. Because the policy is optimized against an isolated, approximate reward model rather than direct ground-truth feedback, it is highly susceptible to \"reward hacking\" or overoptimization, where the agent exploits inaccuracies in the reward model to achieve high scores for undesirable behaviors. Furthermore, if the reward model is iteratively updated, the policy faces a non-stationary reward signal, complicating training stability and revealing a fragile interdependence between the specific policy behavior and the reward model's boundaries.",
+      "scores": {
+        "faithfulness": 0.9523809523809523,
+        "answer_relevancy": 0.9584960640691126,
+        "context_precision": 0.7499999999625,
+        "context_recall": 0.6666666666666666
+      }
+    },
+    {
+      "id": "q_024",
+      "question": "Contrast canonical and agentic RAG architectures in terms of their retrieval coordination and adaptivity, and explain the deployment tradeoffs associated with moving from static pipelines to autonomous orchestration.",
+      "question_type": "conceptual",
+      "question_subtype": "tradeoff",
+      "answer": "Canonical and agentic RAG architectures differ fundamentally in their structural logic, retrieval strategies, and levels of flexibility.\n\n### Retrieval Coordination and Adaptivity\n*   **Canonical RAG:** This architecture utilizes a linear, predetermined pipeline with a static coordination approach [1][2]. Retrieval is typically single-pass and rule-based, following a fixed process from dense retrieval to sequence generation [1]. Because it relies on a static pipeline, its adaptivity is low and constrained, making it predictable but inflexible under dynamic needs [1][3].\n*   **Agentic RAG:** These systems employ a modular architecture with dynamic, LLM-driven planning [1]. Retrieval is iterative and multi-hop, allowing the system to decide when to access knowledge and how to formulate queries based on intermediate results [1][5]. This model-driven adaptation provides a high level of flexibility, enabling the system to self-correct and adjust its reasoning trajectory based on query complexity [1][2][5].\n\n### Deployment Trade-offs\nMoving from static pipelines to autonomous orchestration involves several architectural and operational trade-offs:\n\n*   **Complexity and Resource Intensity:** Canonical RAG has low architectural complexity and is suitable for latency-sensitive applications due to its one-shot retrieval and low coordination overhead [1][2]. In contrast, agentic RAG has high complexity and is resource-intensive, leading to higher latency [1][2].\n*   **Reasoning Depth vs. Robustness:** Static pipelines are effective for empirical knowledge retrieval and simple question-answering where queries follow predetermined patterns [3]. However, they offer limited depth and lower robustness for complex tasks [2]. Agentic orchestration provides rich reasoning and higher context fidelity, making it better suited for complex multi-step inference and domain-specific reasoning (e.g., legal or medical diagnostics) [2][3].\n*   **Error Handling and Traceability:** Canonical systems have limited error handling and can suffer from inadequate traceability and context truncation in complex domains [1][3]. Agentic systems incorporate self-correction mechanisms, feedback loops, and active self-reflection to ensure accurate responses and improve reliability [1][5].",
+      "reference": "Canonical RAG architectures operate on a static, rule-based, and linear pipeline consisting of a strict sequence: user query, single-pass retrieval, context concatenation, and sequence generation. Their static nature offers significant deployment advantages in the form of predictable execution, lower computational overhead, and reduced latency, making them highly suitable for real-time, straightforward Q&A tasks. In contrast, agentic RAG architectures abandon linear pipelines in favor of autonomous orchestration. They utilize AI agents (planners, retrievers, critics) to dynamically coordinate the control flow, allowing the system to perform iterative multi-hop retrievals, evaluate intermediate results, and self-correct based on the reasoning demands of the specific query. The tradeoff for this high adaptivity and enhanced capacity for complex reasoning is a massive increase in system complexity. Deploying agentic RAG introduces substantial challenges, including unpredictable latency spikes due to iterative processing loops, significantly higher token/compute resource consumption, and the necessity for far more sophisticated trust and safety guardrails to monitor autonomous decision-making boundaries.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9620684113216956,
+        "context_precision": 0.99999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_023",
+      "question": "How do assignment-based guidance approaches overcome the core limitations of classifier guidance and classifier-free guidance in conditional image generation?",
+      "question_type": "conceptual",
+      "question_subtype": "comparison",
+      "answer": "Assignment-based guidance approaches address the limitations of classifier and classifier-free guidance by reducing or eliminating the reliance on labeled data and annotated datasets [1][2].\n\n**Overcoming Limitations of Classifier Guidance**\nClassifier guidance requires a noise-robust pre-trained classifier, which is heavily dependent on the availability of annotated data that is often unavailable in many applications [2]. Assignment-based guidance overcomes this by:\n*   **Self-Annotation:** Using a self-annotation function $f(z)$ to produce guidance signals $c$ from image representations [1]. This can be achieved through external pre-trained classifiers that generate pseudo-class labels or retrieval models that use distance functions to find similar images [1].\n*   **Self-Supervised Encoders:** Utilizing image encoders (like CLIP or fully self-supervised alternatives) to map inputs to low-dimensional feature representations, which can then be used for conditioning without manual labels [1][4].\n\n**Overcoming Limitations of Classifier-Free Guidance (CFG)**\nWhile CFG eliminates the need for a pre-trained classifier, it still typically relies on conditioning signals like text or class labels during training [2]. Assignment-based methods improve upon this by:\n*   **Unlabeled Data Leveraging:** Using clustering and classification approaches to assign labels to unlabeled data, allowing models to leverage much larger datasets for pre-training [5].\n*   **Retrieval-Based Conditioning:** Methods like kNN-Diffusion and Retrieval-Augmented Diffusion Models (RDM) use retrieval models to generate embeddings from image databases [5]. This facilitates guided generation (such as text-to-image) without requiring large-scale paired image-text datasets or explicit manual annotations [5].\n*   **Multi-modal Flexibility:** By using shared embedding spaces (like CLIP), these frameworks enable both text-based and image-based conditioning during inference, even when the model was not trained on specific image-caption pairs [1][5].",
+      "reference": "Both classifier guidance and classifier-free guidance are fundamentally constrained by their requirement for annotated datasets\u2014either to train a separate noise-robust classifier or to directly train the conditional denoising network using ground-truth labels. This reliance on human annotation acts as a significant bottleneck for scaling diffusion models to massive, uncurated datasets. Assignment-based guidance approaches overcome this limitation by generating their own conditioning signals through self-supervised pipelines. They achieve this by first using an image encoder (which can be fully self-supervised) to map raw inputs into a feature representation space. Then, a \"self-annotation function\"\u2014such as a clustering algorithm, a retrieval model, or a pseudo-label generator\u2014automatically assigns an annotation or cluster ID to the unlabeled image. By substituting human-annotated labels with these auto-generated, representation-based pseudo-labels during the training of the conditional diffusion model, assignment-based guidance enables the system to scale across vast, annotation-free datasets while still retaining the capacity for strictly controlled, conditional image generation during inference.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9296806937118159,
+        "context_precision": 0.699999999965,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_022",
+      "question": "Analyze the tradeoffs between using pairwise comparisons versus unary critiques for human preference elicitation in reward learning.",
+      "question_type": "conceptual",
+      "question_subtype": "tradeoff",
+      "answer": "The tradeoffs between pairwise comparisons (Preference-based RL or PbRL) and unary/absolute ratings (Rating-based RL or RbRL) involve differences in information density, human efficiency, and susceptibility to bias.\n\n### **Advantages of Pairwise Comparisons**\n*   **Ease of Judgment:** It is generally easier for humans and foundation models to provide accurate relative preference information than absolute ratings [1][2].\n*   **Reduced Bias:** Comparisons help reduce bias, inconsistencies, and subjectivity compared to absolute ratings [1].\n*   **Controlled Baselines:** Pairwise comparisons provide an explicit baseline that is easier to control, whereas absolute feedback often depends on an implicit baseline from the current policy [1].\n*   **Reliability:** Some research suggests that binary comparisons perform better than rankings or other feedback types, even when extracted from a larger set [1][4].\n\n### **Disadvantages of Pairwise Comparisons**\n*   **Low Information Density:** Each pairwise preference provides only a single bit of information, which can lead to sample inefficiency [1][2].\n*   **Causal Confusion:** Because each label conveys little information, models are prone to misattributing rewards to noise or misidentifying the reward function [1].\n*   **Lack of Global Context:** Comparisons do not indicate the absolute quality of samples. If all options are poor, a user can state which is better but cannot indicate that both are \"bad\" [2].\n*   **Difficulty with Similar Samples:** Comparisons can be time-consuming when trajectories are of similar quality or incomparable [2]. In some environments, providing a preference can take over 100% more time than providing a rating because of the need to compare very similar video pairs [5].\n\n### **Advantages of Unary/Absolute Ratings**\n*   **Efficiency and Speed:** Humans can provide ratings more quickly than preferences. On average, participants provide approximately 14.03 ratings per minute compared to 8.7 preferences per minute [5].\n*   **Global Value:** Ratings are not relative and provide a \"global view\" of a sample's quality, allowing the model to understand how close it is to the user's goal [2][5].\n*   **Granularity:** Unlike binary choices, ratings can indicate *how much* better or worse a sample is [2].\n\n### **Disadvantages of Unary/Absolute Ratings**\n*   **Subjectivity:** Absolute ratings are highly subjective, which can make the resulting data less informative or consistent [1][5].\n*   **Implicit Baselines:** Ratings are often dependent on the specific policy being served at the time, which acts as an implicit and potentially shifting baseline [1].\n\n### **Missing Information**\nThe provided text does not explicitly use the term \"unary critiques\" in a way that distinguishes them from \"absolute ratings\" or \"cardinal feedback.\" If \"unary critiques\" refers specifically to natural language feedback or specific error identification (rather than scalar ratings), that information is not contained in the provided context.",
+      "reference": "The choice between unary critiques (absolute ratings) and pairwise comparisons involves a tradeoff between information density and labeler consistency. Unary critiques allow a human to provide detailed, descriptive, and information-dense feedback for a single isolated instance. However, because absolute scoring lacks an explicit baseline, it places a high cognitive burden on human labelers to remain consistent over time, making the data highly susceptible to subjective biases and inconsistencies. Conversely, pairwise comparisons mitigate these cognitive biases by providing an explicit baseline (comparing two items side-by-side), leading to much more consistent and reliable human labels. The tradeoff is that binary comparisons convey very little granular information per query. Because the feedback signal is so sparse, reward models trained primarily on pairwise comparisons are vulnerable to causal confusion, meaning the model might misattribute the human's preference to irrelevant noise or spurious correlations rather than the actual desired behavior.",
+      "scores": {
+        "faithfulness": 0.972972972972973,
+        "answer_relevancy": 0.8231007385850081,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_021",
+      "question": "Explain the superficial alignment hypothesis in the context of instruction tuning and how empirical evidence from simplified task definitions supports this critique of supervised fine-tuning.",
+      "question_type": "conceptual",
+      "question_subtype": "limitation",
+      "answer": "The superficial alignment hypothesis posits that a large language model's knowledge and capabilities are almost entirely acquired during the pre-training stage [2][4]. According to this hypothesis, alignment training\u2014such as instruction tuning or supervised fine-tuning (SFT)\u2014does not fundamentally transform the model's reasoning or knowledge but instead teaches it to generate responses according to user-preferred formalizations, styles, and formats [1][2][4][5].\n\nEmpirical evidence supporting this critique comes from studies analyzing how models utilize instructions during SFT:\n\n*   **Simplified Task Definitions:** Experiments by Kung and Peng (2023) showed that models trained on simplified task definitions\u2014where all semantic components were removed, leaving only output information\u2014achieved performance comparable to models trained on original, full instructions [1][3].\n*   **Delusive Examples:** Models trained on \"delusive examples\" containing incorrect input-output mappings also maintained comparable performance to those trained on correct examples [1][3].\n*   **Pattern Copying:** These findings suggest that the performance improvements observed in SFT models are often due to \"superficial alignment,\" where models excel at recognizing output formats and making educated guesses (pattern copying) rather than truly learning or understanding the underlying tasks [1][3].\n*   **Low-Resource Baselines:** In low-resource settings, zero-shot classification baselines have been shown to achieve similar performance to SFT, further suggesting that SFT may primarily \"unlock\" pre-existing capabilities rather than adding new ones [1][3].\n\nWhile SFT is still considered essential for teaching models specific styles, response formats, and domain-specific alignment, these empirical results indicate that for many tasks, SFT acts as a surface-level \"wrapper\" for capabilities already encoded during pre-training [1][3][5].",
+      "reference": "The \"superficial alignment hypothesis\" posits that large language models acquire almost all of their core knowledge and reasoning capabilities during the initial pre-training phase, rather than during supervised fine-tuning (SFT). According to this hypothesis, SFT merely acts as a stylistic filter that teaches the model how to format its pre-existing knowledge into a conversational or user-preferred style. This critique is empirically supported by experiments where researchers trained models on degraded instructions\u2014such as simplified tasks stripped of semantic meaning or \"delusive\" examples containing incorrect input-output mappings. Because models trained on these corrupted instructions achieved performance comparable to those trained on high-quality, original instructions, researchers concluded that SFT models are primarily copying surface-level patterns, stylistic formatting, and tone, rather than genuinely comprehending the semantics or rules of the underlying tasks.",
+      "scores": {
+        "faithfulness": 0.9333333333333333,
+        "answer_relevancy": 0.753617107603231,
+        "context_precision": 0.999999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_020",
+      "question": "Compare the methodologies and underlying risks of constructing synthetic instruction datasets via distillation versus self-improvement.",
+      "question_type": "conceptual",
+      "question_subtype": "comparison",
+      "answer": "### Methodologies\n\n**Distillation**\nDistillation involves transferring knowledge and cognitive abilities from a highly capable \"teacher\" model (e.g., ChatGPT or GPT-4) to a less complex, more computationally efficient \"student\" model [1][4]. The process typically entails:\n*   **Query Gathering:** Collecting queries from fine-tuned, powerful LLMs [1].\n*   **Fine-tuning:** Using these queries and their corresponding outputs as a basis to fine-tune subsequent, often smaller, models like LLaMA-7B [4].\n*   **Complexity Enhancement:** Some methods, such as Evol-Instruct (WizardLM), use a multi-level system of querying prompts to progressively increase the complexity and diversity of the generated data [4].\n\n**Self-Improvement**\nSelf-improvement involves a pre-trained (non-finetuned) LLM bootstrapping off its own generations to improve its instruction-following abilities [3]. The methodology generally follows these steps:\n*   **Seed Data:** Starting with a small pool of human-written tasks (e.g., 175 tasks) [3].\n*   **Instruction Generation:** Randomly sampling seed instructions to serve as few-shot prompts, guiding the model to produce new instructions via in-context learning [3].\n*   **Response Generation:** The model generates responses based on the task type (e.g., generating context first for \"input-first\" tasks like reading comprehension) [3].\n*   **Filtering:** The generated pairs are filtered using specific rules or models [3].\n*   **Iterative Mechanisms:** Advanced approaches like SPIN (Self-Play Fine-Tuning) use a self-play mechanism where the model is fine-tuned to differentiate its own previous iterations' responses from a target human-labeled data distribution [5].\n\n### Underlying Risks\n\n**Distillation Risks**\nThe provided text does not explicitly list specific \"risks\" for distillation, though it notes that the goal is to \"mimic\" the performance of existing powerful models [4].\n\n**Self-Improvement Risks**\nSelf-improvement carries several specific risks due to its reliance on the model's own internal capabilities:\n*   **Foundational Requirements:** The process necessitates a robust LLM as a backbone; without one, the cycle is ineffective [3][5].\n*   **Capability Stagnation:** Without a powerful enough model, the self-improvement cycle may restrict learning to the model's original capabilities [3][5].\n*   **Error Amplification:** The process has the potential to magnify existing biases and errors present in the foundational model [3][5].",
+      "reference": "Both distillation and self-improvement are methods for synthetically generating instruction tuning datasets, but they differ in the source of the generation. Distillation utilizes an external, highly capable \"teacher\" model (like GPT-4) to generate responses to instructions, which are then used to train a smaller, more efficient \"student\" model. In contrast, self-improvement relies on a single pre-trained language model bootstrapping its own instruction-following capabilities by generating both instructions and responses itself, without relying on a superior external model. The primary risk of the self-improvement methodology is its strict reliance on the foundational model's existing strength; if the base LLM is not sufficiently robust, the process can bottleneck at the model's original capability limits and create an echo chamber that magnifies the model's inherent biases and factual errors.",
+      "scores": {
+        "faithfulness": 0.9583333333333334,
+        "answer_relevancy": 0.8729060376876094,
+        "context_precision": 0.8333333332916666,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_019",
+      "question": "What was the total computation time per query for the FAISS HNSW with Webis set-encoder-large reranker compared to the MS Marco cross-encoder pipeline?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "The total computation time per query for the FAISS HNSW + Webis set-encoder-large pipeline was 100.02 seconds [1]. In comparison, the FAISS HNSW + MS Marco cross-encoder pipeline had a total computation time of 0.55 seconds per query [1][2].",
+      "reference": "The total computation time for the FAISS HNSW + Webis set-encoder-large model was 100.02 seconds per query, compared to a much faster 0.55 seconds per query for the FAISS HNSW + MS Marco cross-encoder pipeline.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9822510462983272,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_018",
+      "question": "What percentages of math-related data were found in the ShareGPT and Alpaca datasets during the WizardLM ablation study on GSM8k performance?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "In the WizardLM ablation study, the ShareGPT dataset was found to contain 4.3% math-related data, while the Alpaca dataset contained 11.8% math-related data [1].",
+      "reference": "The ShareGPT dataset was found to contain only 4.3% math-related data, whereas the Alpaca dataset contained 11.8% math-related data.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9665049688902695,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_017",
+      "question": "What are the five prompt operations used by WizardLM's Evol-Instruct method during In-Depth Evolving?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "answer": "The five prompt operations used by WizardLM's Evol-Instruct method during In-Depth Evolving are:\n\n1.  **Add constraints**: Rewriting the prompt to include additional requirements or constraints [1][2][3].\n2.  **Deepening**: Increasing the complexity of the instruction [1][2].\n3.  **Concretizing**: Making the instruction more specific or concrete [1][2].\n4.  **Increased reasoning steps**: Modifying the instruction to require more steps of reasoning [1][2].\n5.  **Complicating input**: Adding complex data formats, such as tables, code, or XML data, to the input [1][2][3].",
+      "reference": "The five specific operations used for In-Depth Evolving are: add constraints, deepening, concretizing, increased reasoning steps, and complicating input.",
+      "scores": {
+        "faithfulness": 0.7142857142857143,
+        "answer_relevancy": 1.0,
+        "context_precision": 0.9999999999666667,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_016",
+      "question": "By what percentage did RePaint's resampling strategy reduce the LPIPS metric on super-resolution masks compared to the SDEdit strategy?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "RePaint's resampling strategy reduced the LPIPS by over 53% on all datasets for super-resolution masks [1][2].",
+      "reference": "RePaint's resampling strategy reduced the LPIPS metric by over 53% on the super-resolution masks across all datasets compared to the SDEdit strategy.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9578199634956109,
+        "context_precision": 0.7499999999625,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_015",
+      "question": "How does RePaint condition the reverse diffusion process on known pixels without modifying the pretrained DDPM network?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "answer": "RePaint conditions the reverse diffusion process by altering the reverse iterations to sample unmasked regions using the provided image information [2]. The process works as follows:\n\n*   **Mathematical Formulation:** For each reverse step from $x_t$ to $x_{t-1}$, the model separately accounts for known and unknown regions based on a binary mask $m$ [3].\n*   **Known Regions:** The known pixels ($x_{t-1}^{known}$) are sampled by adding Gaussian noise to the ground truth image $x_0$ using the forward diffusion property: $x_{t-1}^{known} \\sim \\mathcal{N}(\\sqrt{\\bar{\\alpha}_t}x_0, (1-\\bar{\\alpha}_t)\\mathbf{I})$ [3]. This ensures the known regions maintain the correct distribution properties for that specific time step [3].\n*   **Unknown Regions:** The missing pixels ($x_{t-1}^{unknown}$) are sampled from the standard pretrained DDPM output: $x_{t-1}^{unknown} \\sim \\mathcal{N}(\\mu_{\\theta}(x_t, t), \\Sigma_{\\theta}(x_t, t))$ [3].\n*   **Combination:** The two parts are combined using the mask to create the next intermediate sample: $x_{t-1} = m \\odot x_{t-1}^{known} + (1-m) \\odot x_{t-1}^{unknown}$ [3][5].\n\nBecause this conditioning occurs during the inference sampling process rather than during training, the original DDPM network remains unmodified and does not require mask-specific training [2][4]. To improve semantic harmony between these regions, the method also employs a **resampling** strategy, where the combined output $x_{t-1}$ is occasionally diffused back to $x_t$ to allow the model more iterations to harmonize the boundaries [5].",
+      "reference": "RePaint conditions the generation process by sampling the known regions from the given image using the forward diffusion process at each time step, and then combining them with the unknown regions sampled from the DDPM using the provided binary mask.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9381517164455703,
+        "context_precision": 0.99999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_014",
+      "question": "In the T2T module of the T2T-ViT architecture, what are the exact patch sizes and overlapping values used for the three sequential soft splits?",
+      "question_type": "factual",
+      "question_subtype": "hyperparameter",
+      "answer": "In the T2T module of the T2T-ViT architecture, there are three soft splits with the following exact patch sizes ($P$) and overlapping values ($S$):\n\n*   **Patch sizes ($P$):** [7, 3, 3] [1]\n*   **Overlapping ($S$):** [3, 1, 1] [1]\n\nThese settings reduce the input image size from 224 \u00d7 224 to 14 \u00d7 14 [1].",
+      "reference": "The patch size for the three soft splits is [7,3,3], and the corresponding overlapping is [3,1,1].",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9832262003959493,
+        "context_precision": 0.8333333332916666,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_013",
+      "question": "What top-1 accuracy and MACs does T2T-ViT-14 achieve on ImageNet compared to the ViT-S/16 baseline when trained from scratch?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "When trained from scratch on ImageNet, T2T-ViT-14 achieves a top-1 accuracy of 81.5% with 4.8G MACs [1][4][5]. In comparison, the ViT-S/16 baseline achieves a top-1 accuracy of 78.1% with 10.1G MACs [1][2][5]. \n\nCompared to ViT-S/16, T2T-ViT-14 provides a 3.4% improvement in accuracy while using approximately 51.5% of the MACs [1][2].",
+      "reference": "The T2T-ViT-14 model achieves an 81.5% top-1 accuracy utilizing 4.8G MACs, whereas the ViT-S/16 baseline achieves 78.1% top-1 accuracy and requires a significantly higher 10.1G MACs.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9883814899515405,
+        "context_precision": 0.8874999999778125,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_012",
+      "question": "What are the two steps performed in each Tokens-to-Token process to progressively structurize an image into tokens?",
+      "question_type": "factual",
+      "question_subtype": "architecture",
+      "answer": "Each Tokens-to-Token (T2T) process consists of the following two steps:\n\n1.  **Re-structurization:** A sequence of tokens from a preceding transformer layer is transformed by a self-attention block (MLP(MSA(T))) and then reshaped into an image in the spatial dimension [1][2].\n2.  **Soft Split:** The re-structurized image is split into patches with overlapping to model local structure information and reduce the length of tokens [1][2]. The tokens in each split patch are concatenated into a single token, aggregating local information from surrounding pixels and patches [2].",
+      "reference": "Each Tokens-to-Token (T2T) process consists of two steps: Re-structurization (where tokens are reshaped as an image) and Soft Split (where the image is split into patches with overlapping).",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.812551660164262,
+        "context_precision": 0.99999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_011",
+      "question": "In the alpha-UMi global-to-local progressive fine-tuning, what learning rate is used in the second stage and how many epochs are the planner, caller, and summarizer each fine-tuned for?",
+      "question_type": "factual",
+      "question_subtype": "hyperparameter",
+      "answer": "In the second stage of the $\\alpha$-UMi global-to-local progressive fine-tuning (GLPFT) strategy, the three LLMs are fine-tuned with a reduced learning rate of 1e-5 [1]. The fine-tuning epochs for each component are as follows:\n\n*   **Planner:** 1 epoch [1]\n*   **Caller:** 1 epoch [1]\n*   **Summarizer:** 2 epochs [1]",
+      "reference": "In the second stage of GLPFT, the three LLMs are fine-tuned with a reduced learning rate of 1e-5. The planner and caller undergo fine-tuning for 1 epoch, while the summarizer is fine-tuned for 2 epochs.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9252076169407522,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_010",
+      "question": "What are the three components that the alpha-UMi framework decomposes a single LLM's capabilities into?",
+      "question_type": "factual",
+      "question_subtype": "architecture",
+      "answer": "The \u03b1-UMi framework decomposes the capabilities of a single LLM into the following three components:\n\n1.  **Planner**: Responsible for planning, decision-making, and generating rationales based on the system state [1][5]. It determines whether to activate the caller, activate the summarizer, or terminate the execution [1][5].\n2.  **Caller**: Directed by the planner's rationale and responsible for invoking specific tools by generating legal and useful requests (actions) [1][5].\n3.  **Summarizer**: Guided by the planner to craft the final user answer based on the execution trajectory [1][5].",
+      "reference": "The alpha-UMi framework decomposes the capabilities of a single LLM into a planner, a caller, and a summarizer.",
+      "scores": {
+        "answer_relevancy": 0.8408938967046792,
+        "context_precision": 0.99999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_009",
+      "question": "Why were queries with more than 20 ground truth answers excluded from the Amazon STaRK evaluation benchmark?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "answer": "Queries with more than 20 ground truth answers were excluded to ensure methodological consistency with established benchmarks and to address a known bias in retrieval evaluation metrics [1][2]. \n\nSpecifically, queries with extensive ground truth sets can:\n*   **Artificially inflate Recall@20 performance**, as there are more opportunities for a relevant document to be found [1].\n*   **Simultaneously suppress Hit Rate and Mean Reciprocal Rank (MRR) scores**, because the increased number of relevant documents makes it more likely that they will appear beyond the top-k positions [1].",
+      "reference": "Queries with over 20 ground truth answers were excluded to address a known evaluation bias where large ground truth sets artificially inflate Recall@20 performance while suppressing Hit Rate and Mean Reciprocal Rank (MRR) scores.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.912694127888576,
+        "context_precision": 0.9999999999,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_008",
+      "question": "What percentage improvement in Hit@1 did the best neural retriever-reranker pipeline achieve over published baselines for knowledge graph retrieval in e-commerce?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "The best neural retriever-reranker pipeline achieved a **20.4%** improvement in Hit@1 over published benchmarks [4]. This performance gain was part of a study evaluating multiple RAG pipeline configurations using the STaRK Semi-structured Knowledge Base (SKB) for e-commerce contexts [4].",
+      "reference": "The pipeline demonstrated a 20.4% higher Hit@1 compared to previously published benchmark results.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8581781216224625,
+        "context_precision": 0.499999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_007",
+      "question": "What reward model accuracy did the Alpaca-RRHF model trained with direct preference achieve?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "The Alpaca-RRHF model trained with diverse beam search sampling (Alpaca-RRHFDP) achieved a reward model accuracy of 61.75% [1][2][3].",
+      "reference": "The Alpaca-RRHFDP model achieved a reward model accuracy of 61.75%.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8966279771291733,
+        "context_precision": 0.9999999999666667,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_006",
+      "question": "What two types of loss are combined to calculate the total loss during RRHF optimization?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "answer": "The total loss in RRHF optimization is the unweighted sum of the following two types of loss:\n\n1.  **Ranking Loss ($L_{rank}$):** This loss aligns the model's probabilities for multiple responses with human preferences [3]. It encourages the model to assign higher conditional log probabilities to better responses and lower probabilities to worse ones [2].\n2.  **Cross-Entropy Loss ($L_{ft}$):** Similar to supervised fine-tuning (SFT), this loss requires the model to learn the specific response that has the highest reward [1].",
+      "reference": "The total loss in RRHF is defined as the unweighted sum of the ranking loss and the cross-entropy loss (supervised fine-tuning loss).",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9639438804516628,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_005",
+      "question": "How does RRHF score sampled responses before aligning them with human preferences?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "answer": "RRHF scores sampled responses by calculating the logarithm of conditional probabilities for each response under the model $\\pi$ [1][2]. Specifically, the score $p_i$ for a response $y_i$ given a query $x$ is determined by the length-normalized conditional log probability:\n\n$$p_i = \\frac{\\sum_{t} \\log P_{\\pi}(y_{i,t} | x, y_{i,<t})}{\\|y_i\\|}$$\n\nwhere $P_{\\pi}(y_{i,t} | x, y_{i,<t})$ represents the probability of each token in the response [2]. This scoring method allows the model to serve as its own reward model, where higher probabilities are intended to correspond to better responses [2][3]. These scores are then used in a ranking loss function to align the model's probabilities with human preference rewards or labels [2][4].",
+      "reference": "RRHF scores sampled responses based on the length-normalized logarithm of conditional probabilities provided by the training language model.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8907328254426473,
+        "context_precision": 0.99999999998,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_004",
+      "question": "How much compute savings does the Primer architecture achieve compared to the original T5 architecture in large scale auto-regressive language model training on C4?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "In large-scale auto-regressive language model training on the C4 dataset, the Primer architecture achieves **4.2X less compute** usage to reach the same quality as the original T5 architecture [1][4].\n\nSpecific performance comparisons at a 537M parameter scale include:\n*   **To reach a perplexity (PPLX) of 13.25:** Primer requires 207K steps and 3.8K TPUv3 hours, whereas the original T5 requires 1M steps and 15.7K TPUv3 hours [1].\n*   **To reach a perplexity of 12.69:** Primer requires 480K steps and 8.3K TPUv3 hours, while the strengthened Transformer++ baseline requires 1M steps and 16.5K TPUv3 hours [1].\n\nThe compute savings factor for Primer increases as more compute is invested due to the asymptotic nature of the training curves [1][2]. Additionally, when compared to the Transformer++ baseline specifically, Primer is 2X more compute efficient [1].",
+      "reference": "Primer achieves the same target quality as the original 537M parameter T5 architecture while using 4.2X less training compute.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9349958088795599,
+        "context_precision": 0.999999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_003",
+      "question": "What two architectural modifications make up the Primer-EZ model for efficient language modeling?",
+      "question_type": "factual",
+      "question_subtype": "architecture",
+      "answer": "The Primer-EZ model is defined by two main architectural modifications to the original Transformer:\n\n1.  **Squared ReLU Activations:** The ReLU activation function in the Transformer\u2019s feed forward block is replaced with a squared ReLU activation [1][2][4].\n2.  **Multi-DConv-Head Attention (MDHA):** A depthwise convolution layer (specifically a 3x1 spatial D-Conv) is added after each Query (Q), Key (K), and Value (V) projection in the self-attention mechanism [1][2][4].\n\nThese modifications are described as easy to implement and robust across different codebases [1][4].",
+      "reference": "Primer-EZ consists of squaring feed forward ReLU activations and adding a depthwise convolution layer after each Q, K, and V projection in the self-attention mechanism.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.8968949447010911,
+        "context_precision": 0.999999999975,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_002",
+      "question": "How much does AWQ reduce quantization degradation for the OpenFlamingo-9B visual language model under the INT4-g128 32-shot setting?",
+      "question_type": "factual",
+      "question_subtype": "metric",
+      "answer": "AWQ reduces the quantization degradation for the OpenFlamingo-9B model from 4.57 to 1.17 under the INT4-g128 32-shot setting [1][2].",
+      "reference": "Activation-aware Weight Quantization reduces the quantization degradation in the 32-shot setting from 4.57 to 1.17 under the INT4-g128 configuration.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.962951507286932,
+        "context_precision": 0.99999999995,
+        "context_recall": 1.0
+      }
+    },
+    {
+      "id": "q_001",
+      "question": "What percentage of salient weights needs to be protected to significantly reduce quantization loss in activation-aware weight quantization?",
+      "question_type": "factual",
+      "question_subtype": "method-detail",
+      "answer": "Protecting only 1% of salient weights can significantly reduce quantization error and improve the performance of quantized LLMs [1][3][4]. Research indicates that selecting these weights based on activation magnitude\u2014rather than weight magnitude\u2014allows a model to achieve performance comparable to mixed-precision (1% FP16) while remaining hardware-friendly [2][4][5]. Even keeping as little as 0.1% of these salient channels in FP16 can significantly improve performance [3][4].",
+      "reference": "Protecting only 0.1% to 1% of the salient weights can greatly bridge the performance degradation caused by quantization loss.",
+      "scores": {
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.9046140005339637,
+        "context_precision": 0.99999999998,
+        "context_recall": 1.0
+      }
+    }
+  ]
+}

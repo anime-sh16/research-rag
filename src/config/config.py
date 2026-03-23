@@ -67,7 +67,7 @@ class APIConfig(BaseModel):
 class RetrievalConfig(BaseModel):
     query_model: str = "gemini-3-flash-preview"
     temperature: float = 0.1
-    hybrid_prefetch_k: int = 30
+    hybrid_prefetch_k: int = 20
     rerank_top_n: int = 5
     jina_rerank_model: str = "jina-reranker-v3"
     mmr_lambda: float = 0.8

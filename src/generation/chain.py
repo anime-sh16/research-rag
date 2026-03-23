@@ -69,7 +69,7 @@ PROMPT_VARIANTS: dict[str, dict[str, str]] = {
             "- If the context contains no relevant information at all, say exactly:"
             " 'I don't have enough information to answer this.' Do not guess or extrapolate."
             "Output:\n"
-            "A choesive response to the user's query based on the context provided."
+            "A cohesive response to the user's query based on the context provided."
         ),
         "template": ("<CONTEXT>\n{context}\n</CONTEXT>\n\nQuestion: {question}"),
     },

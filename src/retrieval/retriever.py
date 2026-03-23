@@ -120,7 +120,6 @@ class Subquery(BaseModel):
     expansion_terms: list[str] = Field(
         ...,
         description="The expansion terms to use for the BM25 sparse query",
-        examples=[["expansion term 1", "expansion term 2"]],
     )
 
 
@@ -339,7 +338,7 @@ class Retriever:
                 "query": query,
                 "documents": [c["text"] for c in candidates],
                 "top_n": self.jina_top_n,
-                "return_embeddings": True,
+                # "return_embeddings": True,  # TODO: re-enable when implementing MMR
                 "return_documents": False,
             },
             timeout=60,
@@ -350,7 +349,7 @@ class Retriever:
             {
                 **candidates[r["index"]],
                 "score": r["relevance_score"],
-                "dense_embedding": r["embedding"],
+                # "dense_embedding": r["embedding"],  # TODO: re-enable when implementing MMR
             }
             for r in response.json()["results"]
         ]
