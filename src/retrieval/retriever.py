@@ -26,6 +26,9 @@ from src.config.config import settings
 logger = logging.getLogger(__name__)
 
 
+# Retry predicates
+
+
 def _is_rate_limit_error(exc: BaseException) -> bool:
     return isinstance(exc, genai_errors.ClientError) and (
         getattr(exc, "status_code", None) == 429 or "429" in str(exc)
@@ -50,10 +53,66 @@ def _is_service_unavailable_error(exc: BaseException) -> bool:
     )
 
 
+# Composable retry decorator for all Gemini API calls
+_gemini_retry = lambda fn: (  # noqa: E731
+    retry(
+        retry=retry_if_exception(_is_service_unavailable_error),
+        wait=wait_exponential(multiplier=180, min=180, max=900, exp_base=1),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )(
+        retry(
+            retry=retry_if_exception(_is_rate_limit_error),
+            wait=wait_exponential(multiplier=60, min=60, max=480),
+            stop=stop_after_attempt(5),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )(
+            retry(
+                retry=retry_if_exception(_is_timeout_error),
+                wait=wait_exponential(multiplier=5, min=5, max=60),
+                stop=stop_after_attempt(3),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            )(fn)
+        )
+    )
+)
+
+
+# Module constants
+
 COLLECTION_NAME = settings.db.collection_name
 VECTOR_DIM = settings.db.embedding_dimension
 QUERY_CACHE_FILE = settings.data.temp_dir / settings.data.query_cache_file
 _JINA_RERANK_URL = settings.jina_rerank_url
+
+QUERY_ANALYSIS_PROMPT = """\
+You are a search query analyzer for an ML research paper retrieval system.
+
+Given a user query, your job is to:
+1. Determine if the query asks about MULTIPLE DISTINCT topics/papers/methods. \
+If so, decompose into separate sub-queries — one per topic.
+2. For EACH sub-query, extract expansion terms: domain-specific synonyms, \
+abbreviations, related technical jargon, or alternative names that authors \
+might use in their papers instead of the terms in the query.
+
+Rules:
+- If the query is about a SINGLE topic, return exactly ONE sub-query with the original query text.
+- Do NOT rephrase or simplify the sub-queries. Keep them close to the original wording, just scoped to one topic each.
+- Expansion terms should bridge vocabulary gaps — include terms a paper might use even if the user didn't. Think: method names, architecture components, technique aliases.
+- Keep expansion terms focused (3-8 per sub-query). Quality over quantity.
+
+Examples:
+Query: "What is the role of knowledge distillation in MobileBERT?"
+→ Single topic. One sub-query. Expansion: knowledge distillation, teacher-student, model compression, bottleneck layers, inverted bottleneck.
+
+Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-experts routing strategy does Switch Transformer use?"
+→ Two distinct topics. Sub-query 1: LoRA vs prefix tuning for fine-tuning (expansion: low-rank adaptation, soft prompts, parameter-efficient, PEFT, adapter layers). Sub-query 2: Switch Transformer routing strategy (expansion: mixture-of-experts, MoE, top-k gating, expert capacity, load balancing, sparse activation)."""
+
+
+# Pydantic schemas for structured LLM output
 
 
 class Subquery(BaseModel):
@@ -68,8 +127,14 @@ class Subquery(BaseModel):
 class Query(BaseModel):
     subquery: list[Subquery] = Field(
         ...,
-        description="The subquery to search for. Each subquery has a query and a list of expansion terms. May be one or more subqueries.",
+        description=(
+            "The subquery to search for. Each subquery has a query and a list"
+            " of expansion terms. May be one or more subqueries."
+        ),
     )
+
+
+# Retriever
 
 
 class Retriever:
@@ -83,9 +148,7 @@ class Retriever:
             genai.Client(api_key=settings.google_api_key.get_secret_value()),
             tracing_extra={
                 "tags": ["gemini", "python"],
-                "metadata": {
-                    "integration": "google-genai",
-                },
+                "metadata": {"integration": "google-genai"},
             },
         )
         self.langsmith_client = Client()
@@ -99,6 +162,8 @@ class Retriever:
             "Content-Type": "application/json",
         }
         self._cache = self._load_cache()
+
+    # Embedding cache
 
     def _load_cache(self) -> dict[str, list[float]]:
         """Load existing query cache from JSONL into memory as {hash: vector}."""
@@ -126,37 +191,13 @@ class Retriever:
         Path(QUERY_CACHE_FILE).parent.mkdir(parents=True, exist_ok=True)
         with open(QUERY_CACHE_FILE, "a") as f:
             f.write(
-                json.dumps(
-                    {
-                        "query": query,
-                        "hash": query_hash,
-                        "embedding": embedding,
-                    }
-                )
+                json.dumps({"query": query, "hash": query_hash, "embedding": embedding})
                 + "\n"
             )
 
-    @retry(
-        retry=retry_if_exception(_is_service_unavailable_error),
-        wait=wait_exponential(multiplier=180, min=180, max=900, exp_base=1),
-        stop=stop_after_attempt(5),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
-    @retry(
-        retry=retry_if_exception(_is_rate_limit_error),
-        wait=wait_exponential(multiplier=60, min=60, max=480),
-        stop=stop_after_attempt(5),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
-    @retry(
-        retry=retry_if_exception(_is_timeout_error),
-        wait=wait_exponential(multiplier=5, min=5, max=60),
-        stop=stop_after_attempt(3),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
+    # Embedding
+
+    @_gemini_retry
     def _embed_query(self, query: str) -> list[float]:
         response = self.gemini_client.models.embed_content(
             model=settings.db.embedding_model,
@@ -186,96 +227,22 @@ class Retriever:
         self._save_to_cache(query, query_hash, embedding)
         return embedding
 
-    @traceable(run_type="tool", name="retrieval/jina_rerank")
-    def _rerank(self, query: str, candidates: list[dict]) -> list[dict]:
-        """Rerank candidates using Jina Reranker API, return top_k sorted by relevance."""
-        if not candidates:
-            return candidates
-
-        response = requests.post(
-            _JINA_RERANK_URL,
-            headers=self._jina_headers,
-            json={
-                "model": settings.retrieval.jina_rerank_model,
-                "query": query,
-                "documents": [c["text"] for c in candidates],
-                "top_n": self.jina_top_n,
-                "return_embeddings": True,
-                "return_documents": False,
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-
-        return [
-            {
-                **candidates[r["index"]],
-                "score": r["relevance_score"],
-                "dense_embedding": r["embedding"],
-            }
-            for r in response.json()["results"]
-        ]
+    # Query analysis (decomposition + expansion)
 
     @traceable(run_type="llm", name="retrieval/query_extraction")
-    @retry(
-        retry=retry_if_exception(_is_service_unavailable_error),
-        wait=wait_exponential(multiplier=180, min=180, max=900, exp_base=1),
-        stop=stop_after_attempt(5),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
-    @retry(
-        retry=retry_if_exception(_is_rate_limit_error),
-        wait=wait_exponential(multiplier=60, min=60, max=480),
-        stop=stop_after_attempt(5),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
-    @retry(
-        retry=retry_if_exception(_is_timeout_error),
-        wait=wait_exponential(multiplier=5, min=5, max=60),
-        stop=stop_after_attempt(3),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
+    @_gemini_retry
     def _extract_subquery(self, query: str) -> dict:
         """Decompose a query into sub-queries with BM25 expansion terms.
-
-        Uses an LLM to analyze whether the query targets multiple distinct topics
-        and extracts domain-specific synonyms/jargon that may not appear in the
-        original query but are used in the source papers.
 
         Returns a dict matching the Query schema:
             {"subquery": [{"query": str, "expansion_terms": [str, ...]}, ...]}
         """
-        _prompt = """You are a search query analyzer for an ML research paper retrieval system.
-
-Given a user query, your job is to:
-1. Determine if the query asks about MULTIPLE DISTINCT topics/papers/methods. \
-If so, decompose into separate sub-queries — one per topic.
-2. For EACH sub-query, extract expansion terms: domain-specific synonyms, \
-abbreviations, related technical jargon, or alternative names that authors \
-might use in their papers instead of the terms in the query.
-
-Rules:
-- If the query is about a SINGLE topic, return exactly ONE sub-query with the original query text.
-- Do NOT rephrase or simplify the sub-queries. Keep them close to the original wording, just scoped to one topic each.
-- Expansion terms should bridge vocabulary gaps — include terms a paper might use even if the user didn't. Think: method names, architecture components, technique aliases.
-- Keep expansion terms focused (3-8 per sub-query). Quality over quantity.
-
-Examples:
-Query: "What is the role of knowledge distillation in MobileBERT?"
-→ Single topic. One sub-query. Expansion: knowledge distillation, teacher-student, model compression, bottleneck layers, inverted bottleneck.
-
-Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-experts routing strategy does Switch Transformer use?"
-→ Two distinct topics. Sub-query 1: LoRA vs prefix tuning for fine-tuning (expansion: low-rank adaptation, soft prompts, parameter-efficient, PEFT, adapter layers). Sub-query 2: Switch Transformer routing strategy (expansion: mixture-of-experts, MoE, top-k gating, expert capacity, load balancing, sparse activation)."""
-
         run = get_current_run_tree()
         if run:
             run.add_metadata(
                 {
                     "full_prompt_sent": query,
-                    "system_instruction": _prompt,
+                    "system_instruction": QUERY_ANALYSIS_PROMPT,
                     "model": self.query_model,
                 }
             )
@@ -284,11 +251,9 @@ Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-
             model=self.query_model,
             contents=f"Query: {query}",
             config=types.GenerateContentConfig(
-                system_instruction=_prompt,
+                system_instruction=QUERY_ANALYSIS_PROMPT,
                 temperature=settings.retrieval.temperature,
-                thinking_config=types.ThinkingConfig(
-                    thinking_level="minimal",
-                ),
+                thinking_config=types.ThinkingConfig(thinking_level="minimal"),
                 http_options=types.HttpOptions(timeout=60000),
                 response_mime_type="application/json",
                 response_schema=Query,
@@ -305,13 +270,7 @@ Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-
 
         return response.parsed.model_dump()
 
-    @traceable(run_type="tool", name="retrieval/mmr_selection")
-    def _mmr_selection(self, candidates: list[dict], lamda: float = 0.8) -> list[dict]:
-        """
-        Select top-k candidates using Maximal Marginal Relevance (MMR).
-        """
-        # TODO: implenet the MMR selection
-        return candidates
+    # Hybrid search
 
     @traceable(run_type="retriever", name="retrieval/subquery_search")
     def _search_subquery(
@@ -320,7 +279,6 @@ Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-
         """Run hybrid search for a single sub-query with BM25 expansion terms."""
         query_vector = self._get_query_vector(sub_query)
 
-        # Build expanded BM25 text: sub-query + expansion terms
         bm25_text = sub_query
         if expansion_terms:
             bm25_text = f"{sub_query} {' '.join(expansion_terms)}"
@@ -365,6 +323,52 @@ Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-
                 seen[key] = c
         return list(seen.values())
 
+    # Reranking
+
+    @traceable(run_type="tool", name="retrieval/jina_rerank")
+    def _rerank(self, query: str, candidates: list[dict]) -> list[dict]:
+        """Rerank candidates using Jina Reranker API, return top_k sorted by relevance."""
+        if not candidates:
+            return candidates
+
+        response = requests.post(
+            _JINA_RERANK_URL,
+            headers=self._jina_headers,
+            json={
+                "model": settings.retrieval.jina_rerank_model,
+                "query": query,
+                "documents": [c["text"] for c in candidates],
+                "top_n": self.jina_top_n,
+                "return_embeddings": True,
+                "return_documents": False,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+
+        return [
+            {
+                **candidates[r["index"]],
+                "score": r["relevance_score"],
+                "dense_embedding": r["embedding"],
+            }
+            for r in response.json()["results"]
+        ]
+
+    # MMR
+
+    @traceable(run_type="tool", name="retrieval/mmr_selection")
+    def _mmr_selection(self, candidates: list[dict], lamda: float = 0.8) -> list[dict]:
+        """Select top-k candidates using Maximal Marginal Relevance (MMR)."""
+        # TODO: implement MMR selection
+
+        for candidate in candidates:
+            candidate.pop("dense_embedding", None)
+
+        return candidates
+
+    # -- Main entry point ----------------------------------------------------
+
     @traceable(run_type="retriever", name="retrieval/hybrid_search")
     def retrieve(self, query: str) -> list[dict]:
         logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
@@ -397,9 +401,10 @@ Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-
         # Step 4: Rerank merged candidates against the original query
         chunks = self._rerank(query, candidates)
 
+        # Step 5: MMR diversity selection
         chunks = self._mmr_selection(chunks)
 
-        # LangSmith Tracing & Proxy Metrics
+        # Step 6: LangSmith Tracing & Proxy Metrics
         run = get_current_run_tree()
         if run:
             if not chunks:
@@ -413,13 +418,12 @@ Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-
                     set(c["paper_id"] for c in candidates if c.get("paper_id"))
                 )
 
-                trace_chunks = [
-                    {**chunk, "text": (chunk["text"] or "")[:100]} for chunk in chunks
-                ]
-
                 run.add_metadata(
                     {
-                        "chunks_returned": trace_chunks,
+                        "chunks_returned": [
+                            {**chunk, "text": (chunk["text"] or "")[:100]}
+                            for chunk in chunks
+                        ],
                         "top_k_requested": self.top_k,
                         "prefetch_k": self.prefetch_k,
                         "candidate_papers_before_rerank": candidate_papers,
@@ -430,24 +434,14 @@ Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-
                     }
                 )
 
-                self.langsmith_client.create_feedback(
-                    run_id=run.id,
-                    key="retrieval_avg_score",
-                    score=sum(scores) / len(scores),
-                    trace_id=run.trace_id,
-                )
-                self.langsmith_client.create_feedback(
-                    run_id=run.id,
-                    key="retrieval_score_spread",
-                    score=max(scores) - min(scores),
-                    trace_id=run.trace_id,
-                )
-                self.langsmith_client.create_feedback(
-                    run_id=run.id,
-                    key="source_diversity",
-                    score=unique_papers,
-                    trace_id=run.trace_id,
-                )
+                for key, value in [
+                    ("retrieval_avg_score", sum(scores) / len(scores)),
+                    ("retrieval_score_spread", max(scores) - min(scores)),
+                    ("source_diversity", unique_papers),
+                ]:
+                    self.langsmith_client.create_feedback(
+                        run_id=run.id, key=key, score=value, trace_id=run.trace_id
+                    )
 
         logger.info(
             "Retrieved %d chunks after rerank (scores: %s).",

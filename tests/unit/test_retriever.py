@@ -34,7 +34,8 @@ def _make_jina_response(
         scores = [0.9 - i * 0.05 for i in range(len(candidates))]
     return {
         "results": [
-            {"index": i, "relevance_score": score} for i, score in enumerate(scores)
+            {"index": i, "relevance_score": score, "embedding": [0.1] * 64}
+            for i, score in enumerate(scores)
         ]
     }
 
@@ -184,8 +185,8 @@ class TestRerank:
         ]
         retriever._mock_jina_response.json.return_value = {
             "results": [
-                {"index": 0, "relevance_score": 0.9},
-                {"index": 1, "relevance_score": 0.7},
+                {"index": 0, "relevance_score": 0.9, "embedding": [0.1] * 64},
+                {"index": 1, "relevance_score": 0.7, "embedding": [0.1] * 64},
             ]
         }
 
@@ -205,8 +206,8 @@ class TestRerank:
         ]
         retriever._mock_jina_response.json.return_value = {
             "results": [
-                {"index": 1, "relevance_score": 0.95},
-                {"index": 0, "relevance_score": 0.60},
+                {"index": 1, "relevance_score": 0.95, "embedding": [0.1] * 64},
+                {"index": 0, "relevance_score": 0.60, "embedding": [0.1] * 64},
             ]
         }
 
@@ -219,7 +220,7 @@ class TestRerank:
         """After rerank, chunk['score'] must be Jina's relevance_score, not the original."""
         candidates = [{"text": "text", "title": "T", "paper_id": "1", "score": 0.5}]
         retriever._mock_jina_response.json.return_value = {
-            "results": [{"index": 0, "relevance_score": 0.82}]
+            "results": [{"index": 0, "relevance_score": 0.82, "embedding": [0.1] * 64}]
         }
 
         result = retriever._rerank("q", candidates)
@@ -238,7 +239,7 @@ class TestRerank:
             }
         ]
         retriever._mock_jina_response.json.return_value = {
-            "results": [{"index": 0, "relevance_score": 0.7}]
+            "results": [{"index": 0, "relevance_score": 0.7, "embedding": [0.1] * 64}]
         }
 
         result = retriever._rerank("q", candidates)
@@ -255,6 +256,13 @@ class TestRetrieve:
         """Prevent LangSmith tracing from making external calls."""
         with patch("src.retrieval.retriever.get_current_run_tree", return_value=None):
             yield
+
+    @pytest.fixture(autouse=True)
+    def _patch_extract_subquery(self, retriever):
+        """Bypass LLM-based query analysis — return original query as single sub-query."""
+        retriever._extract_subquery = MagicMock(
+            side_effect=lambda q: {"subquery": [{"query": q, "expansion_terms": []}]}
+        )
 
     def _setup_embed(self, retriever) -> None:
         fake_embedding = MagicMock()
@@ -299,7 +307,7 @@ class TestRetrieve:
         )  # qdrant score — must NOT appear in output
         retriever._mock_qdrant.query_points.return_value.points = [point]
         retriever._mock_jina_response.json.return_value = {
-            "results": [{"index": 0, "relevance_score": 0.75}]
+            "results": [{"index": 0, "relevance_score": 0.75, "embedding": [0.1] * 64}]
         }
 
         chunks = retriever.retrieve("query")
@@ -363,6 +371,13 @@ class TestRetrieve:
 class TestTracingDoesNotMutateChunks:
     """Tracing truncation must not mutate the chunks returned to the caller."""
 
+    @pytest.fixture(autouse=True)
+    def _patch_extract_subquery(self, retriever):
+        """Bypass LLM-based query analysis."""
+        retriever._extract_subquery = MagicMock(
+            side_effect=lambda q: {"subquery": [{"query": q, "expansion_terms": []}]}
+        )
+
     def _setup_embed(self, retriever) -> None:
         fake_embedding = MagicMock()
         fake_embedding.values = [0.1] * settings.db.embedding_dimension
@@ -378,7 +393,7 @@ class TestTracingDoesNotMutateChunks:
         point = _fake_qdrant_point(source_text=long_text)
         retriever._mock_qdrant.query_points.return_value.points = [point]
         retriever._mock_jina_response.json.return_value = {
-            "results": [{"index": 0, "relevance_score": 0.9}]
+            "results": [{"index": 0, "relevance_score": 0.9, "embedding": [0.1] * 64}]
         }
 
         mock_run = MagicMock()
@@ -389,6 +404,139 @@ class TestTracingDoesNotMutateChunks:
 
         assert len(chunks[0]["text"]) == 500
         assert chunks[0]["text"] == long_text
+
+
+class TestExtractSubquery:
+    """Tests for the LLM-based query decomposition + expansion step."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_langsmith_run(self):
+        with patch("src.retrieval.retriever.get_current_run_tree", return_value=None):
+            yield
+
+    def _mock_llm_response(self, retriever, parsed_obj):
+        """Configure gemini mock to return a parsed Query object."""
+        response = MagicMock()
+        response.parsed = parsed_obj
+        response.usage_metadata = None
+        retriever._mock_gemini.models.generate_content.return_value = response
+
+    def test_returns_plain_dict_with_expected_structure(self, retriever) -> None:
+        """Callers (retrieve loop) depend on dict with 'subquery' key containing list of dicts."""
+        from src.retrieval.retriever import Query, Subquery
+
+        self._mock_llm_response(
+            retriever,
+            Query(
+                subquery=[
+                    Subquery(query="q1", expansion_terms=["t1"]),
+                    Subquery(query="q2", expansion_terms=["t2", "t3"]),
+                ]
+            ),
+        )
+
+        result = retriever._extract_subquery("multi-topic query")
+
+        assert isinstance(result, dict)
+        assert isinstance(result["subquery"], list)
+        assert all(isinstance(sq, dict) for sq in result["subquery"])
+        assert result["subquery"][0]["query"] == "q1"
+        assert result["subquery"][1]["expansion_terms"] == ["t2", "t3"]
+
+
+class TestExtractSubqueryIntegrationWithRetrieve:
+    """Verify that _extract_subquery output correctly drives the retrieval loop."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_langsmith_run(self):
+        with patch("src.retrieval.retriever.get_current_run_tree", return_value=None):
+            yield
+
+    def _setup_embed(self, retriever) -> None:
+        fake_embedding = MagicMock()
+        fake_embedding.values = [0.1] * settings.db.embedding_dimension
+        retriever._mock_gemini.models.embed_content.return_value.embeddings = [
+            fake_embedding
+        ]
+
+    def test_multi_subquery_triggers_multiple_qdrant_searches(self, retriever) -> None:
+        """Each sub-query must result in a separate Qdrant search call."""
+        self._setup_embed(retriever)
+        retriever._mock_qdrant.query_points.return_value.points = []
+        retriever._extract_subquery = MagicMock(
+            return_value={
+                "subquery": [
+                    {"query": "sub-query A", "expansion_terms": ["x"]},
+                    {"query": "sub-query B", "expansion_terms": ["y"]},
+                ]
+            }
+        )
+
+        retriever.retrieve("original query")
+
+        assert retriever._mock_qdrant.query_points.call_count == 2
+
+    def test_expansion_terms_injected_into_bm25_text(self, retriever) -> None:
+        """Expansion terms must appear in the sparse/BM25 Document text, not the dense query."""
+        self._setup_embed(retriever)
+        retriever._mock_qdrant.query_points.return_value.points = []
+        retriever._extract_subquery = MagicMock(
+            return_value={
+                "subquery": [
+                    {
+                        "query": "QServe inference",
+                        "expansion_terms": ["SmoothAttention", "W4A8KV4"],
+                    },
+                ]
+            }
+        )
+
+        retriever.retrieve("query")
+
+        call_kwargs = retriever._mock_qdrant.query_points.call_args.kwargs
+        sparse_prefetch = call_kwargs["prefetch"][1]
+        bm25_doc_text = sparse_prefetch.query.text
+        assert "SmoothAttention" in bm25_doc_text
+        assert "W4A8KV4" in bm25_doc_text
+        assert "QServe inference" in bm25_doc_text
+
+    def test_rerank_called_with_original_query_not_subquery(self, retriever) -> None:
+        """Reranking must score against the original user query, not decomposed sub-queries."""
+        self._setup_embed(retriever)
+        point = _fake_qdrant_point()
+        retriever._mock_qdrant.query_points.return_value.points = [point]
+        retriever._mock_jina_response.json.return_value = {
+            "results": [{"index": 0, "relevance_score": 0.8, "embedding": [0.1] * 64}]
+        }
+        retriever._extract_subquery = MagicMock(
+            return_value={
+                "subquery": [
+                    {"query": "decomposed sub-query", "expansion_terms": []},
+                ]
+            }
+        )
+
+        retriever.retrieve("original full query")
+
+        rerank_call = retriever._mock_post.call_args
+        payload = rerank_call.kwargs.get("json") or rerank_call.args[1]
+        assert payload["query"] == "original full query"
+
+    def test_fallback_on_extraction_failure_uses_original_query(
+        self, retriever
+    ) -> None:
+        """If LLM call fails, retrieve must fall back to searching with original query."""
+        self._setup_embed(retriever)
+        retriever._mock_qdrant.query_points.return_value.points = []
+        retriever._extract_subquery = MagicMock(side_effect=RuntimeError("LLM down"))
+
+        result = retriever.retrieve("my query")
+
+        # Should not raise, and should have searched with the original query
+        assert isinstance(result, list)
+        call_kwargs = retriever._mock_qdrant.query_points.call_args.kwargs
+        sparse_prefetch = call_kwargs["prefetch"][1]
+        assert sparse_prefetch.query.text == "my query"
 
 
 class TestEmbedQuery:
