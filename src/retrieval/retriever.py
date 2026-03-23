@@ -10,6 +10,7 @@ from google.genai import errors as genai_errors
 from google.genai import types
 from langsmith import Client, traceable, wrappers
 from langsmith.run_helpers import get_current_run_tree
+from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 from qdrant_client.models import Document, Fusion, FusionQuery, Prefetch
 from tenacity import (
@@ -55,6 +56,22 @@ QUERY_CACHE_FILE = settings.data.temp_dir / settings.data.query_cache_file
 _JINA_RERANK_URL = settings.jina_rerank_url
 
 
+class Subquery(BaseModel):
+    query: str = Field(..., description="The query to search for")
+    expansion_terms: list[str] = Field(
+        ...,
+        description="The expansion terms to use for the BM25 sparse query",
+        examples=[["expansion term 1", "expansion term 2"]],
+    )
+
+
+class Query(BaseModel):
+    subquery: list[Subquery] = Field(
+        ...,
+        description="The subquery to search for. Each subquery has a query and a list of expansion terms. May be one or more subqueries.",
+    )
+
+
 class Retriever:
     def __init__(self, top_k: int = 5):
         self.qdrant_client = QdrantClient(
@@ -72,6 +89,7 @@ class Retriever:
             },
         )
         self.langsmith_client = Client()
+        self.query_model = settings.retrieval.query_model
         self.top_k = top_k
         self.jina_top_n = settings.retrieval.rerank_top_n
         self.prefetch_k = settings.retrieval.hybrid_prefetch_k
@@ -198,20 +216,115 @@ class Retriever:
             for r in response.json()["results"]
         ]
 
+    @traceable(run_type="llm", name="retrieval/query_extraction")
+    @retry(
+        retry=retry_if_exception(_is_service_unavailable_error),
+        wait=wait_exponential(multiplier=180, min=180, max=900, exp_base=1),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    @retry(
+        retry=retry_if_exception(_is_rate_limit_error),
+        wait=wait_exponential(multiplier=60, min=60, max=480),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    @retry(
+        retry=retry_if_exception(_is_timeout_error),
+        wait=wait_exponential(multiplier=5, min=5, max=60),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _extract_subquery(self, query: str) -> dict:
+        """Decompose a query into sub-queries with BM25 expansion terms.
+
+        Uses an LLM to analyze whether the query targets multiple distinct topics
+        and extracts domain-specific synonyms/jargon that may not appear in the
+        original query but are used in the source papers.
+
+        Returns a dict matching the Query schema:
+            {"subquery": [{"query": str, "expansion_terms": [str, ...]}, ...]}
+        """
+        _prompt = """You are a search query analyzer for an ML research paper retrieval system.
+
+Given a user query, your job is to:
+1. Determine if the query asks about MULTIPLE DISTINCT topics/papers/methods. \
+If so, decompose into separate sub-queries — one per topic.
+2. For EACH sub-query, extract expansion terms: domain-specific synonyms, \
+abbreviations, related technical jargon, or alternative names that authors \
+might use in their papers instead of the terms in the query.
+
+Rules:
+- If the query is about a SINGLE topic, return exactly ONE sub-query with the original query text.
+- Do NOT rephrase or simplify the sub-queries. Keep them close to the original wording, just scoped to one topic each.
+- Expansion terms should bridge vocabulary gaps — include terms a paper might use even if the user didn't. Think: method names, architecture components, technique aliases.
+- Keep expansion terms focused (3-8 per sub-query). Quality over quantity.
+
+Examples:
+Query: "What is the role of knowledge distillation in MobileBERT?"
+→ Single topic. One sub-query. Expansion: knowledge distillation, teacher-student, model compression, bottleneck layers, inverted bottleneck.
+
+Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-experts routing strategy does Switch Transformer use?"
+→ Two distinct topics. Sub-query 1: LoRA vs prefix tuning for fine-tuning (expansion: low-rank adaptation, soft prompts, parameter-efficient, PEFT, adapter layers). Sub-query 2: Switch Transformer routing strategy (expansion: mixture-of-experts, MoE, top-k gating, expert capacity, load balancing, sparse activation)."""
+
+        run = get_current_run_tree()
+        if run:
+            run.add_metadata(
+                {
+                    "full_prompt_sent": query,
+                    "system_instruction": _prompt,
+                    "model": self.query_model,
+                }
+            )
+
+        response = self.gemini_client.models.generate_content(
+            model=self.query_model,
+            contents=f"Query: {query}",
+            config=types.GenerateContentConfig(
+                system_instruction=_prompt,
+                temperature=settings.retrieval.temperature,
+                thinking_config=types.ThinkingConfig(
+                    thinking_level="minimal",
+                ),
+                http_options=types.HttpOptions(timeout=60000),
+                response_mime_type="application/json",
+                response_schema=Query,
+            ),
+        )
+
+        if run and hasattr(response, "usage_metadata") and response.usage_metadata:
+            run.add_metadata(
+                {
+                    "input_tokens": response.usage_metadata.prompt_token_count,
+                    "output_tokens": response.usage_metadata.candidates_token_count,
+                }
+            )
+
+        return response.parsed.model_dump()
+
     @traceable(run_type="tool", name="retrieval/mmr_selection")
     def _mmr_selection(self, candidates: list[dict], lamda: float = 0.8) -> list[dict]:
         """
         Select top-k candidates using Maximal Marginal Relevance (MMR).
         """
         # TODO: implenet the MMR selection
-        pass
+        return candidates
 
-    @traceable(run_type="retriever", name="retrieval/hybrid_search")
-    def retrieve(self, query: str) -> list[dict]:
-        logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
-        query_vector = self._get_query_vector(query)
+    @traceable(run_type="retriever", name="retrieval/subquery_search")
+    def _search_subquery(
+        self, sub_query: str, expansion_terms: list[str]
+    ) -> list[dict]:
+        """Run hybrid search for a single sub-query with BM25 expansion terms."""
+        query_vector = self._get_query_vector(sub_query)
 
-        # Hybrid search: dense + BM25 sparse with server-side RRF fusion
+        # Build expanded BM25 text: sub-query + expansion terms
+        bm25_text = sub_query
+        if expansion_terms:
+            bm25_text = f"{sub_query} {' '.join(expansion_terms)}"
+
         results = self.qdrant_client.query_points(
             collection_name=COLLECTION_NAME,
             prefetch=[
@@ -221,7 +334,7 @@ class Retriever:
                     limit=self.prefetch_k,
                 ),
                 Prefetch(
-                    query=Document(text=query, model=settings.db.sparse_model),
+                    query=Document(text=bm25_text, model=settings.db.sparse_model),
                     using=settings.db.sparse_name,
                     limit=self.prefetch_k,
                 ),
@@ -231,7 +344,7 @@ class Retriever:
             with_payload=True,
         ).points
 
-        candidates = [
+        return [
             {
                 "score": result.score,
                 "text": result.payload.get("source_text"),
@@ -243,6 +356,45 @@ class Retriever:
             for result in results
         ]
 
+    def _merge_candidates(self, candidate_lists: list[dict]) -> list[dict]:
+        """Union + deduplicate candidates from multiple sub-queries, keeping highest score."""
+        seen: dict[tuple, dict] = {}
+        for c in candidate_lists:
+            key = (c["paper_id"], c["chunk_index"])
+            if key not in seen or c["score"] > seen[key]["score"]:
+                seen[key] = c
+        return list(seen.values())
+
+    @traceable(run_type="retriever", name="retrieval/hybrid_search")
+    def retrieve(self, query: str) -> list[dict]:
+        logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
+
+        # Step 1: Query analysis — decompose + extract expansion terms
+        try:
+            extraction = self._extract_subquery(query)
+        except Exception as e:
+            logger.warning(
+                "Sub-query extraction failed for query '%s': %s. Skipping.", query, e
+            )
+            extraction = {"subquery": [{"query": query, "expansion_terms": []}]}
+        sub_queries = extraction["subquery"]
+        logger.info(
+            "Query decomposed into %d sub-queries: %s",
+            len(sub_queries),
+            [sq["query"][:80] for sq in sub_queries],
+        )
+
+        # Step 2: Hybrid search per sub-query
+        candidate_lists = []
+        for sq in sub_queries:
+            candidate_lists.extend(
+                self._search_subquery(sq["query"], sq["expansion_terms"])
+            )
+
+        # Step 3: Merge + deduplicate across sub-queries
+        candidates = self._merge_candidates(candidate_lists)
+
+        # Step 4: Rerank merged candidates against the original query
         chunks = self._rerank(query, candidates)
 
         chunks = self._mmr_selection(chunks)
@@ -271,6 +423,10 @@ class Retriever:
                         "top_k_requested": self.top_k,
                         "prefetch_k": self.prefetch_k,
                         "candidate_papers_before_rerank": candidate_papers,
+                        "sub_queries": [sq["query"] for sq in sub_queries],
+                        "expansion_terms": {
+                            sq["query"]: sq["expansion_terms"] for sq in sub_queries
+                        },
                     }
                 )
 
