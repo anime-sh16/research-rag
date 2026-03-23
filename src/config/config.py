@@ -76,7 +76,7 @@ class RetrievalConfig(BaseModel):
 class EvaluationConfig(BaseModel):
     dataset_name: str = "arxiv-rag-eval-set"
     evalset_path: Path = Path("evaluation/evalset.json")
-    results_dir: Path = Path("evaluation/results/v2-hybrid-rerank-v2")
+    results_dir: Path | None = None
     evaluator_model: str = "gemini-3-flash-preview"
 
 
@@ -109,6 +109,12 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "env_nested_delimiter": "__",
     }
+
+    def model_post_init(self, _context: object, /) -> None:
+        if self.evaluation.results_dir is None:
+            self.evaluation.results_dir = Path(
+                f"evaluation/results/{self.pipeline_version}"
+            )
 
 
 settings = Settings()
