@@ -69,7 +69,20 @@ def make_target(prompt_version: str | None = None):
     def target(inputs: dict) -> dict:
         result = run_pipeline(inputs["question"], prompt_version=prompt_version)
         contexts = [chunk["text"] for chunk in result["sources"] if chunk.get("text")]
-        return {"answer": result["answer"], "contexts": contexts}
+        retrieved_sources = [
+            {
+                "title": chunk.get("title"),
+                "paper_id": chunk.get("paper_id"),
+                "chunk_index": chunk.get("chunk_index"),
+                "score": chunk.get("score"),
+            }
+            for chunk in result["sources"]
+        ]
+        return {
+            "answer": result["answer"],
+            "contexts": contexts,
+            "retrieved_sources": retrieved_sources,
+        }
 
     return target
 
@@ -174,8 +187,11 @@ def _save_snapshot(experiment_name: str, results) -> str:
                 "question": row["example"].inputs["question"],
                 "question_type": row["example"].metadata.get("question_type"),
                 "question_subtype": row["example"].metadata.get("question_subtype"),
+                "source_papers": row["example"].metadata.get("source_papers"),
                 "answer": run_outputs.get("answer"),
                 "reference": example_outputs.get("ground_truth"),
+                "contexts": run_outputs.get("contexts"),
+                "retrieved_sources": run_outputs.get("retrieved_sources"),
                 "scores": q_scores,
             }
         )
