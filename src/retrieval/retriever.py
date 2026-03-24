@@ -273,7 +273,7 @@ class Retriever:
 
     @traceable(run_type="retriever", name="retrieval/subquery_search")
     def _search_subquery(
-        self, sub_query: str, expansion_terms: list[str]
+        self, sub_query: str, expansion_terms: list[str], prefetch_limit: int
     ) -> list[dict]:
         """Run hybrid search for a single sub-query with BM25 expansion terms."""
         query_vector = self._get_query_vector(sub_query)
@@ -288,16 +288,16 @@ class Retriever:
                 Prefetch(
                     query=query_vector,
                     using=settings.db.dense_name,
-                    limit=self.prefetch_k,
+                    limit=prefetch_limit,
                 ),
                 Prefetch(
                     query=Document(text=bm25_text, model=settings.db.sparse_model),
                     using=settings.db.sparse_name,
-                    limit=self.prefetch_k,
+                    limit=prefetch_limit,
                 ),
             ],
             query=FusionQuery(fusion=Fusion.RRF),
-            limit=self.prefetch_k,
+            limit=prefetch_limit,
             with_payload=True,
         ).points
 
@@ -388,10 +388,14 @@ class Retriever:
         )
 
         # Step 2: Hybrid search per sub-query
+        # Scale prefetch per sub-query so total candidates stay ~prefetch_k
+        prefetch_limit = self.prefetch_k // len(sub_queries)
         candidate_lists = []
         for sq in sub_queries:
             candidate_lists.extend(
-                self._search_subquery(sq["query"], sq["expansion_terms"])
+                self._search_subquery(
+                    sq["query"], sq["expansion_terms"], prefetch_limit
+                )
             )
 
         # Step 3: Merge + deduplicate across sub-queries

@@ -538,6 +538,25 @@ class TestExtractSubqueryIntegrationWithRetrieve:
         sparse_prefetch = call_kwargs["prefetch"][1]
         assert sparse_prefetch.query.text == "my query"
 
+    def test_prefetch_limit_scales_with_subquery_count(self, retriever) -> None:
+        """Prefetch per sub-query must be prefetch_k // num_subqueries to keep total pool constant."""
+        self._setup_embed(retriever)
+        retriever._mock_qdrant.query_points.return_value.points = []
+        retriever._extract_subquery = MagicMock(
+            return_value={
+                "subquery": [
+                    {"query": "sub A", "expansion_terms": []},
+                    {"query": "sub B", "expansion_terms": []},
+                ]
+            }
+        )
+
+        retriever.retrieve("multi-topic query")
+
+        expected_limit = retriever.prefetch_k // 2
+        for call in retriever._mock_qdrant.query_points.call_args_list:
+            assert call.kwargs["limit"] == expected_limit
+
 
 class TestEmbedQuery:
     def test_raises_descriptive_error_on_empty_embeddings(self, retriever) -> None:
