@@ -87,6 +87,11 @@ def make_target(prompt_version: str | None = None):
     return target
 
 
+def _sanitize_for_eval(text: str) -> str:
+    """Escape braces so they survive .format() inside RAGAS/instructor."""
+    return text.replace("{", "{{").replace("}", "}}")
+
+
 def _safe_ragas_score(metric_name: str, coro) -> float | None:
     """Run an async RAGAS scorer, returning None on failure."""
     try:
@@ -109,8 +114,8 @@ def eval_faithfulness(run: Run, example: Example) -> dict:
         "faithfulness",
         _faithfulness.ascore(
             user_input=example.inputs["question"],
-            response=answer,
-            retrieved_contexts=contexts,
+            response=_sanitize_for_eval(answer),
+            retrieved_contexts=[_sanitize_for_eval(c) for c in contexts],
         ),
     )
     return {"key": "faithfulness", "score": score}
@@ -125,7 +130,7 @@ def eval_answer_relevancy(run: Run, example: Example) -> dict:
         "answer_relevancy",
         _answer_relevancy.ascore(
             user_input=example.inputs["question"],
-            response=answer,
+            response=_sanitize_for_eval(answer),
         ),
     )
     return {"key": "answer_relevancy", "score": score}
@@ -137,8 +142,10 @@ def eval_context_precision(run: Run, example: Example) -> dict:
         "context_precision",
         _context_precision.ascore(
             user_input=example.inputs["question"],
-            retrieved_contexts=outputs.get("contexts", []),
-            reference=example.outputs["ground_truth"],
+            retrieved_contexts=[
+                _sanitize_for_eval(c) for c in outputs.get("contexts", [])
+            ],
+            reference=_sanitize_for_eval(example.outputs["ground_truth"]),
         ),
     )
     return {"key": "context_precision", "score": score}
@@ -150,8 +157,10 @@ def eval_context_recall(run: Run, example: Example) -> dict:
         "context_recall",
         _context_recall.ascore(
             user_input=example.inputs["question"],
-            retrieved_contexts=outputs.get("contexts", []),
-            reference=example.outputs["ground_truth"],
+            retrieved_contexts=[
+                _sanitize_for_eval(c) for c in outputs.get("contexts", [])
+            ],
+            reference=_sanitize_for_eval(example.outputs["ground_truth"]),
         ),
     )
     return {"key": "context_recall", "score": score}
