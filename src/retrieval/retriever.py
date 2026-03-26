@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -403,16 +404,21 @@ class Retriever:
             [sq["query"][:80] for sq in sub_queries],
         )
 
-        # Step 2+3: Hybrid search per sub-query + re-rank
+        # Step 2+3: Hybrid search per sub-query + re-rank (parallel)
         # Scale prefetch per sub-query so total candidates stay ~prefetch_k
         prefetch_limit = self.prefetch_k // len(sub_queries)
-        reranked_lists = []
-        for sq in sub_queries:
+
+        def _search_and_rerank(sq: dict) -> list[dict]:
             candidates = self._search_subquery(
                 sq["query"], sq["expansion_terms"], prefetch_limit
             )
-            reranked_candidates = self._rerank(sq["query"], candidates)
-            reranked_lists.append(reranked_candidates)
+            return self._rerank(sq["query"], candidates)
+
+        if len(sub_queries) == 1:
+            reranked_lists = [_search_and_rerank(sub_queries[0])]
+        else:
+            with ThreadPoolExecutor(max_workers=len(sub_queries)) as pool:
+                reranked_lists = list(pool.map(_search_and_rerank, sub_queries))
 
         # Step 4: merged across sub queries
         if len(reranked_lists) == 1:
@@ -434,7 +440,12 @@ class Retriever:
                     set(c["paper_id"] for c in chunks if c.get("paper_id"))
                 )
                 candidate_papers = len(
-                    set(c["paper_id"] for c in candidates if c.get("paper_id"))
+                    set(
+                        c["paper_id"]
+                        for rl in reranked_lists
+                        for c in rl
+                        if c.get("paper_id")
+                    )
                 )
 
                 run.add_metadata(
@@ -445,7 +456,7 @@ class Retriever:
                         ],
                         "top_k_requested": self.top_k,
                         "prefetch_k": self.prefetch_k,
-                        "candidate_papers_before_rerank": candidate_papers,
+                        "candidate_papers_after_rerank_and_rrf": candidate_papers,
                         "sub_queries": [sq["query"] for sq in sub_queries],
                         "expansion_terms": {
                             sq["query"]: sq["expansion_terms"] for sq in sub_queries
