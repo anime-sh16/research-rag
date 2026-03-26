@@ -88,19 +88,16 @@ VECTOR_DIM = settings.db.embedding_dimension
 QUERY_CACHE_FILE = settings.data.temp_dir / settings.data.query_cache_file
 _JINA_RERANK_URL = settings.jina_rerank_url
 
-QUERY_ANALYSIS_PROMPT = """\
-You are a search query analyzer for an ML research paper retrieval system.
+QUERY_ANALYSIS_PROMPT = """You are a search query analyzer for an ML research paper retrieval system.
 
 Given a user query, your job is to:
-1. Determine if the query asks about MULTIPLE DISTINCT topics/papers/methods. \
-If so, decompose into separate sub-queries — one per topic.
-2. For EACH sub-query, extract expansion terms: domain-specific synonyms, \
-abbreviations, related technical jargon, or alternative names that authors \
-might use in their papers instead of the terms in the query.
+1. Determine if the query asks about MULTIPLE DISTINCT topics/papers/methods. If so, decompose into separate sub-queries — one per topic.
+2. For EACH sub-query, extract expansion terms: domain-specific synonyms, abbreviations, related technical jargon, or alternative names that authors might use in their papers instead of the terms in the query.
 
 Rules:
 - If the query is about a SINGLE topic, return exactly ONE sub-query with the original query text.
 - Do NOT rephrase or simplify the sub-queries. Keep them close to the original wording, just scoped to one topic each.
+- Each sub-query MUST explicitly name the entity/method/model it refers to. Never use pronouns ("they", "it", "this approach") or implicit references that rely on the other sub-query for context. Each sub-query must be understandable on its own.
 - Expansion terms should bridge vocabulary gaps — include terms a paper might use even if the user didn't. Think: method names, architecture components, technique aliases.
 - Keep expansion terms focused (3-8 per sub-query). Quality over quantity.
 
