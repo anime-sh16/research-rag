@@ -319,6 +319,25 @@ class Retriever:
                 seen[key] = c
         return list(seen.values())
 
+    def _rrf_merge(self, ranked_lists: list[list[dict]], k: int = 60) -> list[dict]:
+        """Merge multiple ranked lists using Reciprocal Rank Fusion.
+
+        For each candidate, RRF score = sum over lists of 1/(k + rank),
+        where rank is 1-based position in that list.
+        Deduplicates by (paper_id, chunk_index).
+        """
+        seen: dict[tuple, dict] = {}
+        for ranked_list in ranked_lists:
+            for rank, c in enumerate(ranked_list):
+                key = (c["paper_id"], c["chunk_index"])
+                rrf_score = 1 / (k + rank + 1)
+                if key in seen:
+                    seen[key]["score"] += rrf_score
+                else:
+                    seen[key] = {**c, "score": rrf_score}
+
+        return sorted(seen.values(), key=lambda x: x["score"], reverse=True)
+
     # Reranking
 
     @traceable(run_type="tool", name="retrieval/jina_rerank")
@@ -384,22 +403,22 @@ class Retriever:
             [sq["query"][:80] for sq in sub_queries],
         )
 
-        # Step 2: Hybrid search per sub-query
+        # Step 2+3: Hybrid search per sub-query + re-rank
         # Scale prefetch per sub-query so total candidates stay ~prefetch_k
         prefetch_limit = self.prefetch_k // len(sub_queries)
-        candidate_lists = []
+        reranked_lists = []
         for sq in sub_queries:
-            candidate_lists.extend(
-                self._search_subquery(
-                    sq["query"], sq["expansion_terms"], prefetch_limit
-                )
+            candidates = self._search_subquery(
+                sq["query"], sq["expansion_terms"], prefetch_limit
             )
+            reranked_candidates = self._rerank(sq["query"], candidates)
+            reranked_lists.append(reranked_candidates)
 
-        # Step 3: Merge + deduplicate across sub-queries
-        candidates = self._merge_candidates(candidate_lists)
-
-        # Step 4: Rerank merged candidates against the original query
-        chunks = self._rerank(query, candidates)
+        # Step 4: merged across sub queries
+        if len(reranked_lists) == 1:
+            chunks = reranked_lists[0][: self.top_k]
+        else:
+            chunks = self._rrf_merge(reranked_lists)[: self.top_k]
 
         # Step 5: MMR diversity selection
         chunks = self._mmr_selection(chunks)
