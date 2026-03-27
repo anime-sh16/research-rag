@@ -500,8 +500,8 @@ class TestExtractSubqueryIntegrationWithRetrieve:
         assert "W4A8KV4" in bm25_doc_text
         assert "QServe inference" in bm25_doc_text
 
-    def test_rerank_called_with_subquery_not_original(self, retriever) -> None:
-        """Reranking must score against the sub-query, not the original user query."""
+    def test_rerank_called_with_original_query_not_subquery(self, retriever) -> None:
+        """Reranking must score against the original user query, not decomposed sub-queries."""
         self._setup_embed(retriever)
         point = _fake_qdrant_point()
         retriever._mock_qdrant.query_points.return_value.points = [point]
@@ -520,7 +520,7 @@ class TestExtractSubqueryIntegrationWithRetrieve:
 
         rerank_call = retriever._mock_post.call_args
         payload = rerank_call.kwargs.get("json") or rerank_call.args[1]
-        assert payload["query"] == "decomposed sub-query"
+        assert payload["query"] == "original full query"
 
     def test_fallback_on_extraction_failure_uses_original_query(
         self, retriever
@@ -556,180 +556,6 @@ class TestExtractSubqueryIntegrationWithRetrieve:
         expected_limit = retriever.prefetch_k // 2
         for call in retriever._mock_qdrant.query_points.call_args_list:
             assert call.kwargs["limit"] == expected_limit
-
-
-class TestRRFMerge:
-    """Tests for Reciprocal Rank Fusion merging of per-subquery reranked lists."""
-
-    def test_single_list_returns_same_order(self, retriever) -> None:
-        ranked = [
-            {"paper_id": "A", "chunk_index": 0, "score": 0.9, "text": "a"},
-            {"paper_id": "B", "chunk_index": 0, "score": 0.7, "text": "b"},
-        ]
-        result = retriever._rrf_merge([ranked])
-        assert result[0]["paper_id"] == "A"
-        assert result[1]["paper_id"] == "B"
-
-    def test_duplicate_across_lists_accumulates_scores(self, retriever) -> None:
-        """A chunk appearing at rank 0 in both lists should score higher than one in only one list."""
-        list_a = [
-            {"paper_id": "A", "chunk_index": 0, "score": 0.9, "text": "shared"},
-            {"paper_id": "B", "chunk_index": 0, "score": 0.8, "text": "only-a"},
-        ]
-        list_b = [
-            {"paper_id": "A", "chunk_index": 0, "score": 0.85, "text": "shared"},
-            {"paper_id": "C", "chunk_index": 0, "score": 0.7, "text": "only-b"},
-        ]
-        result = retriever._rrf_merge([list_a, list_b], k=60)
-
-        # A appears in both lists at rank 0 → score = 2 * 1/(60+1) ≈ 0.0328
-        # B appears once at rank 1 → score = 1/(60+2) ≈ 0.0161
-        # C appears once at rank 1 → score = 1/(60+2) ≈ 0.0161
-        assert result[0]["paper_id"] == "A"
-        assert result[0]["score"] == pytest.approx(2 / 61, abs=1e-6)
-
-    def test_interleaves_results_from_different_lists(self, retriever) -> None:
-        """Two disjoint lists should interleave: rank-0 items first, then rank-1 items."""
-        list_a = [
-            {"paper_id": "A", "chunk_index": 0, "score": 0.9, "text": "a0"},
-            {"paper_id": "A", "chunk_index": 1, "score": 0.8, "text": "a1"},
-        ]
-        list_b = [
-            {"paper_id": "B", "chunk_index": 0, "score": 0.9, "text": "b0"},
-            {"paper_id": "B", "chunk_index": 1, "score": 0.8, "text": "b1"},
-        ]
-        result = retriever._rrf_merge([list_a, list_b], k=60)
-
-        # Rank-0 items both get 1/61, rank-1 items both get 1/62
-        # So rank-0 items come first (tied), then rank-1 items (tied)
-        top_two_papers = {result[0]["paper_id"], result[1]["paper_id"]}
-        assert top_two_papers == {"A", "B"}
-        assert result[0]["score"] == pytest.approx(result[1]["score"])
-
-    def test_empty_lists_returns_empty(self, retriever) -> None:
-        result = retriever._rrf_merge([[], []])
-        assert result == []
-
-    def test_preserves_metadata_fields(self, retriever) -> None:
-        ranked = [
-            {
-                "paper_id": "X",
-                "chunk_index": 5,
-                "score": 0.9,
-                "text": "content",
-                "title": "Paper X",
-                "authors": ["Auth"],
-            },
-        ]
-        result = retriever._rrf_merge([ranked])
-        assert result[0]["title"] == "Paper X"
-        assert result[0]["authors"] == ["Auth"]
-        assert result[0]["chunk_index"] == 5
-
-    def test_three_lists_with_overlap(self, retriever) -> None:
-        """Chunk appearing in all 3 lists beats chunk appearing in only 2."""
-        shared = {"paper_id": "S", "chunk_index": 0, "score": 0.5, "text": "s"}
-        partial = {"paper_id": "P", "chunk_index": 0, "score": 0.9, "text": "p"}
-        list_a = [shared, partial]
-        list_b = [
-            shared,
-            {"paper_id": "X", "chunk_index": 0, "score": 0.3, "text": "x"},
-        ]
-        list_c = [shared]
-
-        result = retriever._rrf_merge([list_a, list_b, list_c], k=60)
-        assert result[0]["paper_id"] == "S"
-        # S: 3 * 1/61 ≈ 0.0492; P: 1/62 ≈ 0.0161
-        assert result[0]["score"] == pytest.approx(3 / 61, abs=1e-6)
-
-
-class TestSubqueryReranking:
-    """Tests for the new per-subquery reranking + RRF merge flow in retrieve."""
-
-    @pytest.fixture(autouse=True)
-    def _patch_langsmith_run(self):
-        with patch("src.retrieval.retriever.get_current_run_tree", return_value=None):
-            yield
-
-    def _setup_embed(self, retriever) -> None:
-        fake_embedding = MagicMock()
-        fake_embedding.values = [0.1] * settings.db.embedding_dimension
-        retriever._mock_gemini.models.embed_content.return_value.embeddings = [
-            fake_embedding
-        ]
-
-    def test_multi_subquery_reranks_per_subquery(self, retriever) -> None:
-        """With 2 sub-queries, rerank should be called twice (once per sub-query)."""
-        self._setup_embed(retriever)
-        point_a = _fake_qdrant_point(paper_id="A", title="Paper A")
-        point_b = _fake_qdrant_point(paper_id="B", title="Paper B")  # noqa
-        retriever._mock_qdrant.query_points.return_value.points = [point_a]
-        retriever._extract_subquery = MagicMock(
-            return_value={
-                "subquery": [
-                    {"query": "sub-query A", "expansion_terms": []},
-                    {"query": "sub-query B", "expansion_terms": []},
-                ]
-            }
-        )
-        retriever._mock_jina_response.json.return_value = {
-            "results": [{"index": 0, "relevance_score": 0.8, "embedding": [0.1] * 64}]
-        }
-
-        retriever.retrieve("compare A and B")
-
-        assert retriever._mock_post.call_count == 2
-        queries_sent = [
-            call.kwargs.get("json", call.args[1] if len(call.args) > 1 else {}).get(
-                "query"
-            )
-            or call.kwargs.get("json", {}).get("query")
-            for call in retriever._mock_post.call_args_list
-        ]
-        assert "sub-query A" in queries_sent
-        assert "sub-query B" in queries_sent
-
-    def test_single_subquery_skips_rrf(self, retriever) -> None:
-        """Single sub-query should return reranked results directly, no RRF."""
-        self._setup_embed(retriever)
-        points = [_fake_qdrant_point(paper_id=str(i)) for i in range(3)]
-        retriever._mock_qdrant.query_points.return_value.points = points
-        retriever._extract_subquery = MagicMock(
-            return_value={
-                "subquery": [{"query": "single topic", "expansion_terms": []}]
-            }
-        )
-        retriever._mock_jina_response.json.return_value = _make_jina_response(
-            points, scores=[0.9, 0.8, 0.7]
-        )
-
-        retriever._rrf_merge = MagicMock(wraps=retriever._rrf_merge)
-        chunks = retriever.retrieve("single topic query")
-
-        retriever._rrf_merge.assert_not_called()
-        assert len(chunks) <= retriever.top_k
-
-    def test_multi_subquery_uses_rrf(self, retriever) -> None:
-        """Multiple sub-queries should trigger RRF merge."""
-        self._setup_embed(retriever)
-        point = _fake_qdrant_point()
-        retriever._mock_qdrant.query_points.return_value.points = [point]
-        retriever._extract_subquery = MagicMock(
-            return_value={
-                "subquery": [
-                    {"query": "sub A", "expansion_terms": []},
-                    {"query": "sub B", "expansion_terms": []},
-                ]
-            }
-        )
-        retriever._mock_jina_response.json.return_value = {
-            "results": [{"index": 0, "relevance_score": 0.8, "embedding": [0.1] * 64}]
-        }
-
-        retriever._rrf_merge = MagicMock(wraps=retriever._rrf_merge)
-        retriever.retrieve("multi topic")
-
-        retriever._rrf_merge.assert_called_once()
 
 
 class TestEmbedQuery:
