@@ -1,0 +1,50 @@
+name: research-rag
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DUCKDNS_HOST: ${DUCKDNS_HOST:?DUCKDNS_HOST is required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      ui:
+        condition: service_started
+
+  api:
+    image: ${ECR_REGISTRY:-local}/research-rag-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-/opt/research-rag/.env}
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  ui:
+    image: ${ECR_REGISTRY:-local}/research-rag-ui:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: http://api:8000
+      REPO_URL: ${REPO_URL:-https://github.com/}
+    expose:
+      - "8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
