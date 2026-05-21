@@ -1,0 +1,10 @@
+[Unit]
+Description=research-rag: refresh DuckDNS A record with current public IP
+Wants=network-online.target
+After=network-online.target research-rag-secrets.service
+Requires=research-rag-secrets.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/research-rag/deploy/duckdns-update.sh
+User=root

@@ -1,0 +1,11 @@
+[Unit]
+Description=research-rag: DuckDNS refresh timer
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30min
+Persistent=true
+Unit=duckdns-update.service
+
+[Install]
+WantedBy=timers.target
