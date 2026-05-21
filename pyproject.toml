@@ -53,3 +53,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "live: hits live external APIs (Gemini / Jina / Qdrant); excluded by default in CI",
+]
