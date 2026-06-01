@@ -1,0 +1,38 @@
+# Local development override — replaces Caddy with direct port exposure.
+# Run from repo root:
+#   DUCKDNS_HOST=localhost docker compose --project-directory . \
+#     -f deploy/docker-compose.yml -f deploy/docker-compose.local.yml up --build
+#
+# API  → http://localhost:8000/health
+# UI   → http://localhost:8501
+
+services:
+  caddy:
+    # Disable Caddy locally — access services directly on their ports.
+    profiles:
+      - disabled
+    environment:
+      DUCKDNS_HOST: localhost
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    image: research-rag-api:local
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+
+  ui:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.ui
+    image: research-rag-ui:local
+    environment:
+      API_BASE_URL: http://localhost:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy

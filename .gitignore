@@ -23,3 +23,12 @@ LANGSMITH_TRACING_GUIDE.md
 TODO.md
 logs/
 nohup.out
+
+docs/
+
+# AWS bootstrap cache (instance IDs, public IPs — never commit)
+deploy/aws-setup/.cache/
+!deploy/aws-setup/.cache/.keep
+
+# Local Docker cache
+.cache/
