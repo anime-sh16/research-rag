@@ -8,6 +8,7 @@ os.environ.setdefault("QDRANT_API_KEY", "dummy-for-tests")
 os.environ.setdefault("JINA_API_KEY", "dummy-for-tests")
 os.environ.setdefault("LANGSMITH_API_KEY", "dummy-for-tests")
 os.environ.setdefault("LANGSMITH_PROJECT", "test-project")
+os.environ.setdefault("PIPELINE_VERSION", "test")
 
 # Disable LangSmith tracing during tests to avoid polluting production traces
 os.environ["LANGSMITH_TRACING"] = "false"
