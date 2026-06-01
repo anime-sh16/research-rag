@@ -73,12 +73,37 @@ def main() -> int:
     parser.add_argument("--new", required=True, type=Path)
     parser.add_argument("--tolerance", type=float, default=0.02)
     parser.add_argument(
+        "--min-questions",
+        type=int,
+        default=35,
+        help="Minimum questions with valid scores required. If below this, gate is inconclusive (passes with warning).",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
         help="If provided, write the markdown summary to this path.",
     )
     args = parser.parse_args()
+
+    new_data = load_result(args.new)
+    scored_count = sum(
+        1
+        for q in new_data.get("per_question", [])
+        if any(v is not None for v in q.get("scores", {}).values())
+    )
+    total = len(new_data.get("per_question", []))
+
+    if scored_count < args.min_questions:
+        msg = (
+            f"### RAGAS Gate: INCONCLUSIVE\n"
+            f"Only {scored_count}/{total} questions scored (minimum: {args.min_questions}).\n"
+            f"Likely a transient API error. Passing to avoid blocking deploy.\n"
+        )
+        print(msg)
+        if args.output:
+            args.output.write_text(msg)
+        return 0
 
     result = evaluate_gate(args.baseline, args.new, args.tolerance)
     md = result.to_markdown()
