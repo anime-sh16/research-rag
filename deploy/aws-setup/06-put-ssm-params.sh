@@ -24,7 +24,7 @@ ENV_FILE="$(cd "$AWS_SETUP_DIR/../.." && pwd)/.env"
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
-for key in GOOGLE_API_KEY JINA_API_KEY QDRANT_URL QDRANT_API_KEY LANGSMITH_API_KEY LANGSMITH_PROJECT; do
+for key in GOOGLE_API_KEY JINA_API_KEY QDRANT_URL QDRANT_API_KEY LANGSMITH_API_KEY LANGSMITH_PROJECT PIPELINE_VERSION; do
     if [[ -z "${!key:-}" ]]; then
         die "$key is empty in $ENV_FILE"
     fi
@@ -48,7 +48,8 @@ put "$SSM_PREFIX/jina-api-key"      SecureString "$JINA_API_KEY"
 put "$SSM_PREFIX/qdrant-url"        String       "$QDRANT_URL"
 put "$SSM_PREFIX/qdrant-api-key"    SecureString "$QDRANT_API_KEY"
 put "$SSM_PREFIX/langsmith-api-key" SecureString "$LANGSMITH_API_KEY"
-put "$SSM_PREFIX/langsmith-project" String       "$LANGSMITH_PROJECT"
+put "$SSM_PREFIX/langsmith-project"  String       "$LANGSMITH_PROJECT"
+put "$SSM_PREFIX/pipeline-version"  String       "$PIPELINE_VERSION"
 put "$SSM_PREFIX/ecr-registry"      String       "$ECR_REGISTRY"
 
 if [[ "$SKIP_DUCKDNS" -eq 0 ]]; then
