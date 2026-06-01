@@ -1,0 +1,67 @@
+name: RAGAS Evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      experiment:
+        description: "Experiment name (e.g. v3-mmr)"
+        required: true
+        type: string
+      run_gate:
+        description: "Check scores against baseline after evaluation"
+        type: boolean
+        default: true
+      baseline:
+        description: "Baseline results JSON path (relative to repo root)"
+        required: false
+        default: "evaluation/results/v2-hybrid-rerank-v2/v2-hybrid-rerank.json"
+
+jobs:
+  evaluate:
+    name: Run RAGAS
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run evaluation
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_ENDPOINT: "https://api.smith.langchain.com"
+        run: |
+          uv run python -m src.evaluation.ragas_runner \
+            --experiment "${{ inputs.experiment }}"
+
+      - name: Check RAGAS gate
+        if: ${{ inputs.run_gate }}
+        run: |
+          RESULTS=$(find evaluation/results -name "${{ inputs.experiment }}.json" | head -1)
+          if [[ -z "$RESULTS" ]]; then
+            echo "No results file found for experiment ${{ inputs.experiment }}"
+            exit 1
+          fi
+          uv run python scripts/ragas_gate.py \
+            --baseline "${{ inputs.baseline }}" \
+            --new "$RESULTS"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragas-${{ inputs.experiment }}
+          path: evaluation/results/**/${{ inputs.experiment }}.json
+          if-no-files-found: warn
