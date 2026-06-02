@@ -1,0 +1,189 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_ragas_gate:
+        description: "Run RAGAS gate before deploying"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write   # required for OIDC token exchange with AWS
+  contents: read
+
+jobs:
+  # ── Build images and push to ECR ────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push to ECR
+    runs-on: ubuntu-latest
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: meta
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.api
+          platforms: linux/amd64
+          push: true
+          tags: ${{ secrets.ECR_REGISTRY }}/research-rag-api:${{ steps.meta.outputs.tag }}
+          build-args: |
+            GIT_SHA=${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.ui
+          platforms: linux/amd64
+          push: true
+          tags: ${{ secrets.ECR_REGISTRY }}/research-rag-ui:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── RAGAS regression gate (opt-in via workflow_dispatch only) ────────────────
+  ragas-gate:
+    name: RAGAS Regression Gate
+    runs-on: ubuntu-latest
+    if: ${{ inputs.run_ragas_gate == true }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run RAGAS evaluation
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+          LANGSMITH_TRACING: "true"
+          LANGSMITH_ENDPOINT: "https://api.smith.langchain.com"
+        run: uv run python -m src.evaluation.ragas_runner
+
+      - name: Check gate against baseline
+        run: |
+          RESULTS=$(find evaluation/results -name "*.json" -newer evaluation/results/v2-hybrid-rerank-v2/v2-hybrid-rerank.json | head -1)
+          uv run python scripts/ragas_gate.py \
+            --baseline evaluation/results/v2-hybrid-rerank-v2/v2-hybrid-rerank.json \
+            --new "$RESULTS" \
+            --output gate-summary.md
+          cat gate-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload gate results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ragas-gate-${{ github.sha }}
+          path: evaluation/results/**/*.json
+
+  # ── Deploy to EC2 ────────────────────────────────────────────────────────────
+  # Runs if build passed AND (gate passed OR gate was skipped)
+  deploy:
+    name: Deploy to EC2
+    needs: [build-and-push, ragas-gate]
+    if: always() && needs.build-and-push.result == 'success' && (needs.ragas-gate.result == 'success' || needs.ragas-gate.result == 'skipped')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Tag images as latest
+        env:
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        run: |
+          for repo in research-rag-api research-rag-ui; do
+            MANIFEST=$(aws ecr batch-get-image \
+              --repository-name "$repo" \
+              --image-ids "imageTag=$IMAGE_TAG" \
+              --query 'images[0].imageManifest' --output text)
+            aws ecr put-image \
+              --repository-name "$repo" \
+              --image-tag latest \
+              --image-manifest "$MANIFEST"
+          done
+
+      - name: Pull and restart stack on EC2
+        env:
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "deploy $IMAGE_TAG" \
+            --parameters "commands=[
+              \"set -euo pipefail\",
+              \"cd /opt/research-rag/deploy\",
+              \"aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY\",
+              \"ECR_REGISTRY=$ECR_REGISTRY IMAGE_TAG=$IMAGE_TAG docker compose --env-file /opt/research-rag/.env pull\",
+              \"ECR_REGISTRY=$ECR_REGISTRY IMAGE_TAG=$IMAGE_TAG docker compose --env-file /opt/research-rag/.env up -d --remove-orphans\",
+              \"sleep 15\",
+              \"docker compose --env-file /opt/research-rag/.env ps\"
+            ]" \
+            --region "$AWS_REGION" \
+            --query 'Command.CommandId' --output text)
+
+          echo "SSM CommandId: $CMD_ID"
+          aws ssm wait command-executed \
+            --command-id "$CMD_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --region "$AWS_REGION" \
+            --cli-read-timeout 300
+
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --region "$AWS_REGION" \
+            --query 'Status' --output text)
+
+          OUTPUT=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --region "$AWS_REGION" \
+            --query 'StandardOutputContent' --output text)
+
+          echo "$OUTPUT"
+          [[ "$STATUS" == "Success" ]] || { echo "Deploy failed (status: $STATUS)"; exit 1; }
+          echo "Deployed $IMAGE_TAG successfully."

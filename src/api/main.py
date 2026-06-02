@@ -40,6 +40,12 @@ class SourceChunk(BaseModel):
     score: float
 
 
+class HealthResponse(BaseModel):
+    status: str
+    pipeline_version: str
+    git_sha: str
+
+
 class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceChunk]
@@ -133,3 +139,12 @@ def query(request: QueryRequest) -> QueryResponse:
         for chunk in result["sources"]
     ]
     return QueryResponse(answer=result["answer"], sources=sources)
+
+
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(
+        status="ok",
+        pipeline_version=settings.pipeline_version,
+        git_sha=settings.git_sha,
+    )

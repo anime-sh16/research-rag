@@ -69,9 +69,27 @@ def make_target(prompt_version: str | None = None):
     def target(inputs: dict) -> dict:
         result = run_pipeline(inputs["question"], prompt_version=prompt_version)
         contexts = [chunk["text"] for chunk in result["sources"] if chunk.get("text")]
-        return {"answer": result["answer"], "contexts": contexts}
+        retrieved_sources = [
+            {
+                "title": chunk.get("title"),
+                "paper_id": chunk.get("paper_id"),
+                "chunk_index": chunk.get("chunk_index"),
+                "score": chunk.get("score"),
+            }
+            for chunk in result["sources"]
+        ]
+        return {
+            "answer": result["answer"],
+            "contexts": contexts,
+            "retrieved_sources": retrieved_sources,
+        }
 
     return target
+
+
+def _sanitize_for_eval(text: str) -> str:
+    """Escape braces so they survive .format() inside RAGAS/instructor."""
+    return text.replace("{", "{{").replace("}", "}}")
 
 
 def _safe_ragas_score(metric_name: str, coro) -> float | None:
@@ -96,8 +114,8 @@ def eval_faithfulness(run: Run, example: Example) -> dict:
         "faithfulness",
         _faithfulness.ascore(
             user_input=example.inputs["question"],
-            response=answer,
-            retrieved_contexts=contexts,
+            response=_sanitize_for_eval(answer),
+            retrieved_contexts=[_sanitize_for_eval(c) for c in contexts],
         ),
     )
     return {"key": "faithfulness", "score": score}
@@ -112,7 +130,7 @@ def eval_answer_relevancy(run: Run, example: Example) -> dict:
         "answer_relevancy",
         _answer_relevancy.ascore(
             user_input=example.inputs["question"],
-            response=answer,
+            response=_sanitize_for_eval(answer),
         ),
     )
     return {"key": "answer_relevancy", "score": score}
@@ -124,8 +142,10 @@ def eval_context_precision(run: Run, example: Example) -> dict:
         "context_precision",
         _context_precision.ascore(
             user_input=example.inputs["question"],
-            retrieved_contexts=outputs.get("contexts", []),
-            reference=example.outputs["ground_truth"],
+            retrieved_contexts=[
+                _sanitize_for_eval(c) for c in outputs.get("contexts", [])
+            ],
+            reference=_sanitize_for_eval(example.outputs["ground_truth"]),
         ),
     )
     return {"key": "context_precision", "score": score}
@@ -137,8 +157,10 @@ def eval_context_recall(run: Run, example: Example) -> dict:
         "context_recall",
         _context_recall.ascore(
             user_input=example.inputs["question"],
-            retrieved_contexts=outputs.get("contexts", []),
-            reference=example.outputs["ground_truth"],
+            retrieved_contexts=[
+                _sanitize_for_eval(c) for c in outputs.get("contexts", [])
+            ],
+            reference=_sanitize_for_eval(example.outputs["ground_truth"]),
         ),
     )
     return {"key": "context_recall", "score": score}
@@ -174,8 +196,11 @@ def _save_snapshot(experiment_name: str, results) -> str:
                 "question": row["example"].inputs["question"],
                 "question_type": row["example"].metadata.get("question_type"),
                 "question_subtype": row["example"].metadata.get("question_subtype"),
+                "source_papers": row["example"].metadata.get("source_papers"),
                 "answer": run_outputs.get("answer"),
                 "reference": example_outputs.get("ground_truth"),
+                "contexts": run_outputs.get("contexts"),
+                "retrieved_sources": run_outputs.get("retrieved_sources"),
                 "scores": q_scores,
             }
         )

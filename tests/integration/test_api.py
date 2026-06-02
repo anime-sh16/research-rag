@@ -115,3 +115,25 @@ class TestQueryEndpoint:
             mock_chain.generate.assert_called_once_with(
                 "What is LoRA?", FAKE_CHUNKS, prompt_version=None
             )
+
+
+class TestHealthEndpoint:
+    def test_returns_200(self, client: TestClient) -> None:
+        response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_payload_has_status_ok(self, client: TestClient) -> None:
+        response = client.get("/health")
+        assert response.json()["status"] == "ok"
+
+    def test_payload_includes_pipeline_version(self, client: TestClient) -> None:
+        from src.config.config import settings
+
+        response = client.get("/health")
+        assert response.json()["pipeline_version"] == settings.pipeline_version
+
+    def test_payload_includes_git_sha(self, client: TestClient) -> None:
+        from src.config.config import settings
+
+        response = client.get("/health")
+        assert response.json()["git_sha"] == settings.git_sha

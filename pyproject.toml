@@ -27,6 +27,7 @@ dependencies = [
     "jsonref>=1.1.0",
     "ragas>=0.4.3",
     "huggingface-hub>=1.6.0",
+    "streamlit>=1.40",
 ]
 
 [dependency-groups]
@@ -53,3 +54,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "live: hits live external APIs (Gemini / Jina / Qdrant); excluded by default in CI",
+]
