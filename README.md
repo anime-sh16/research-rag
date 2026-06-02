@@ -8,6 +8,27 @@ An end-to-end production-grade RAG system for querying ArXiv ML research papers 
 
 ---
 
+## Contents
+
+- [Live Demo](#live-demo)
+- [Aim](#aim)
+- [How It Works](#how-it-works)
+- [Data](#data)
+- [Ingestion Pipeline](#ingestion-pipeline)
+- [Retrieval](#retrieval)
+- [Generation Pipeline](#generation-pipeline)
+- [FastAPI](#fastapi)
+- [Evaluation](#evaluation)
+- [Results](#results)
+- [Project Structure](#project-structure)
+- [Tech Stack](#tech-stack)
+- [Setup](#setup)
+- [Running](#running)
+- [CI / CD](#ci--cd)
+- [Next Steps](#next-steps)
+
+---
+
 ## Live Demo
 
 **URL:** [https://research-rag-animesh.duckdns.org](https://research-rag-animesh.duckdns.org)
@@ -165,7 +186,7 @@ The app defines two routes at its root: `POST /query` and `GET /health`. In prod
 
 **Response:**
 ```json
-{ "status": "ok", "pipeline_version": "v3.1.1-query-decomp", "git_sha": <git.sha> }
+{ "status": "ok", "pipeline_version": "v3.1.1-query-decomp", "git_sha": "<commit-sha>" }
 ```
 
 `pipeline_version` comes from the repo-root `VERSION` file and `git_sha` is stamped into the image at build time — both are baked from the deployed commit, so `/health` always reflects exactly what's running.
@@ -372,9 +393,12 @@ research-rag/
 │   │   └── retriever.py          # Hybrid search (dense + BM25) + RRF + reranking
 │   ├── generation/
 │   │   └── chain.py              # Gemini generation + LangSmith tracing
-│   └── evaluation/
-│       ├── ragas_runner.py       # RAGAS evaluation + LangSmith experiments
-│       └── dataset_upload.py     # Upload evalset to LangSmith
+│   ├── evaluation/
+│   │   ├── ragas_runner.py       # RAGAS evaluation + LangSmith experiments
+│   │   └── dataset_upload.py     # Upload evalset to LangSmith
+│   └── ui/
+│       ├── app.py                # Streamlit demo (renders answer + sources + health/version)
+│       └── api_client.py         # HTTP client for the FastAPI backend
 ├── evaluation/
 │   ├── evalset.json              # 41 questions + ground truth (immutable)
 │   └── results/                  # per-experiment RAGAS snapshots + analysis
@@ -399,7 +423,8 @@ research-rag/
 │   └── aws-setup/                # One-time infrastructure provisioning scripts
 ├── tests/                        # Unit + integration tests (mirrors src/)
 ├── scripts/                      # Dev utilities (verify connections, smoke tests)
-├── .github/workflows/ci.yml      # Lint + format + test on every push
+├── .github/workflows/            # ci.yml (lint+format+test), deploy.yml (build→ECR→EC2), ragas-ondemand.yml
+├── VERSION                       # Pipeline version label — baked into the image, shown on /health
 ├── pyproject.toml                # Single config: uv, ruff, pytest, hatchling
 └── .env.template                 # Copy to .env and fill in API keys
 ```
