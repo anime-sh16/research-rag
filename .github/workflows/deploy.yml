@@ -50,6 +50,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ secrets.ECR_REGISTRY }}/research-rag-api:${{ steps.meta.outputs.tag }}
+          build-args: |
+            GIT_SHA=${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
