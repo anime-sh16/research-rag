@@ -43,6 +43,7 @@ class SourceChunk(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     pipeline_version: str
+    git_sha: str
 
 
 class QueryResponse(BaseModel):
@@ -142,4 +143,8 @@ def query(request: QueryRequest) -> QueryResponse:
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", pipeline_version=settings.pipeline_version)
+    return HealthResponse(
+        status="ok",
+        pipeline_version=settings.pipeline_version,
+        git_sha=settings.git_sha,
+    )

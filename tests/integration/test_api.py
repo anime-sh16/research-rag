@@ -131,3 +131,9 @@ class TestHealthEndpoint:
 
         response = client.get("/health")
         assert response.json()["pipeline_version"] == settings.pipeline_version
+
+    def test_payload_includes_git_sha(self, client: TestClient) -> None:
+        from src.config.config import settings
+
+        response = client.get("/health")
+        assert response.json()["git_sha"] == settings.git_sha

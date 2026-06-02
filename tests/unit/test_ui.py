@@ -60,3 +60,27 @@ def test_health_returns_payload() -> None:
     with patch("src.ui.api_client.requests.get", return_value=fake_response):
         payload = client.health()
     assert payload == {"status": "ok", "pipeline_version": "v3.1.1"}
+
+
+def test_sidebar_renders_pipeline_version_and_git_sha() -> None:
+    from src.ui import app
+
+    client = MagicMock()
+    client.health.return_value = {
+        "status": "ok",
+        "pipeline_version": "v3.1.1-query-decomp",
+        "git_sha": "60c5255",
+    }
+    with patch.object(app, "st") as mock_st:
+        app.render_sidebar(client)
+
+    rendered = " ".join(
+        str(c)
+        for c in (
+            mock_st.sidebar.success.call_args_list
+            + mock_st.sidebar.caption.call_args_list
+            + mock_st.sidebar.markdown.call_args_list
+        )
+    )
+    assert "v3.1.1-query-decomp" in rendered
+    assert "60c5255" in rendered

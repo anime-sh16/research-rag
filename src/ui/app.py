@@ -29,7 +29,10 @@ def render_sidebar(client: APIClient) -> None:
     st.sidebar.title("research-rag")
     try:
         health = client.health()
-        st.sidebar.success(f"API healthy — pipeline `{health['pipeline_version']}`")
+        st.sidebar.success(
+            f"API healthy — pipeline `{health.get('pipeline_version', 'unknown')}`"
+        )
+        st.sidebar.caption(f"commit `{health.get('git_sha', 'unknown')}`")
     except Exception as e:
         st.sidebar.error(f"API unreachable: {e}")
     st.sidebar.markdown(f"[View source on GitHub]({REPO_URL})")

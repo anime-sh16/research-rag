@@ -5,6 +5,19 @@ import arxiv
 from pydantic import BaseModel, SecretStr
 from pydantic_settings import BaseSettings
 
+# Repo root holds a VERSION file (the pipeline label, e.g. "v3.1.1-prefetch-scale-30").
+# It travels with the code into the Docker image, so the deployed app reports the
+# version of the exact commit it was built from.
+_VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
+
+
+def _read_version_file() -> str:
+    """Return the stripped VERSION file contents, or "" if it cannot be read."""
+    try:
+        return _VERSION_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
 
 class DataConfig(BaseModel):
     temp_dir: Path = Path("data/tmp")
@@ -93,8 +106,13 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr
     langsmith_project: str
 
-    # Cross-cutting — used in tracing tags, evaluation snapshots, experiment metadata
-    pipeline_version: str
+    # Cross-cutting — used in tracing tags, evaluation snapshots, experiment metadata.
+    # Resolved (highest precedence first): PIPELINE_VERSION env → repo VERSION file → "dev".
+    pipeline_version: str | None = None
+
+    # Commit SHA stamped into the image at build time (GIT_SHA build-arg → env).
+    # "unknown" when running outside a built image (local dev, tests, CI checkout).
+    git_sha: str = "unknown"
 
     # App config groups — have defaults, overridable via env (e.g. DB__COLLECTION_NAME=foo)
     data: DataConfig = DataConfig()
@@ -111,6 +129,10 @@ class Settings(BaseSettings):
     }
 
     def model_post_init(self, _context: object, /) -> None:
+        # Fall back to the baked-in VERSION file when no explicit version is provided
+        # (empty string from an unset .env line counts as "not provided").
+        if not self.pipeline_version:
+            self.pipeline_version = _read_version_file() or "dev"
         if self.evaluation.results_dir is None:
             self.evaluation.results_dir = Path(
                 f"evaluation/results/{self.pipeline_version}"
