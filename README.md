@@ -4,7 +4,22 @@
 
 An end-to-end production-grade RAG system for querying ArXiv ML research papers with natural language. Ask a question, get a grounded answer with source citations — retrieved from a corpus of curated ML papers spanning LLMs, diffusion models, RL alignment, vision transformers, and more.
 
-**Current Stage:** v2 — Hybrid Search + Reranking + Gemini 3 Flash
+**Current Stage:** v2 — Hybrid Search + Reranking + Gemini 3 Flash | **Live at [research-rag-animesh.duckdns.org](https://research-rag-animesh.duckdns.org)**
+
+---
+
+## Live Demo
+
+**URL:** [https://research-rag-animesh.duckdns.org](https://research-rag-animesh.duckdns.org)
+
+Ask any natural language question about ML research — RL alignment, LLM inference, diffusion models, vision transformers, and more.
+
+**API:** `POST https://research-rag-animesh.duckdns.org/api/query`
+```bash
+curl -X POST https://research-rag-animesh.duckdns.org/api/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What training objective does InstructGPT use?"}'
+```
 
 ---
 
@@ -286,6 +301,16 @@ research-rag/
 │       ├── v1-baseline.json
 │       ├── v2-hybrid-rerank/
 │       └── v2-hybrid-rerank-v2/
+├── deploy/
+│   ├── Dockerfile.api            # Multi-stage uv build for FastAPI
+│   ├── Dockerfile.ui             # Multi-stage uv build for Streamlit
+│   ├── docker-compose.yml        # Production stack (Caddy + API + UI)
+│   ├── docker-compose.local.yml  # Local override (no Caddy, direct ports)
+│   ├── Caddyfile                 # Reverse proxy + auto TLS config
+│   ├── fetch-secrets.sh          # Pull SSM params → /opt/research-rag/.env
+│   ├── duckdns-update.sh         # Update DuckDNS with current EC2 IP
+│   ├── systemd/                  # Service + timer units for EC2
+│   └── aws-setup/                # One-time infrastructure provisioning scripts
 ├── tests/                        # Unit + integration tests (mirrors src/)
 ├── scripts/                      # Dev utilities (verify connections, smoke tests)
 ├── .github/workflows/ci.yml      # Lint + format + test on every push
@@ -307,6 +332,7 @@ research-rag/
 | **PDF Extraction** | PyMuPDF |
 | **Chunking** | LangChain `RecursiveCharacterTextSplitter` + Tiktoken |
 | **API** | FastAPI + Uvicorn |
+| **UI** | Streamlit |
 | **Evaluation** | RAGAS |
 | **Tracing** | LangSmith |
 | **Config** | Pydantic Settings |
@@ -314,6 +340,12 @@ research-rag/
 | **Linting/Formatting** | Ruff |
 | **Testing** | Pytest |
 | **Packaging** | uv + hatchling |
+| **Containerization** | Docker (multi-stage builds) |
+| **Registry** | AWS ECR |
+| **Compute** | AWS EC2 t3.micro (ap-northeast-1) |
+| **Reverse Proxy / TLS** | Caddy (auto Let's Encrypt) |
+| **DNS** | DuckDNS |
+| **Secrets** | AWS SSM Parameter Store |
 
 ---
 
@@ -372,7 +404,7 @@ uv run ruff format .
 
 ---
 
-## CI
+## CI / CD
 
 Every push to `main` and every pull request runs:
 
@@ -380,13 +412,19 @@ Every push to `main` and every pull request runs:
 2. `ruff format --check` — formatting
 3. `pytest` — full test suite
 
+On merge to `main`, a deploy workflow (coming in Plan C):
+1. Builds `linux/amd64` Docker images, pushes to ECR with git SHA tag
+2. RAGAS regression gate — blocks deploy if composite score drops below baseline
+3. Deploys to EC2 via SSM (zero SSH, no open port 22)
+
 ---
 
 ## Next Steps
 
 | Priority | Task | Addresses |
 |---|---|---|
-| 1 | **Retrieval diversity (MMR / source-aware reranking)** | q_029, q_032 — query terms overwhelm one source |
-| 2 | **Multi-hop retrieval / query decomposition** | q_033, q_034 — second hop not retrieved |
-| 3 | **Table-aware PDF ingestion** | q_039 — only persistent full DK |
-| 4 | **RAGAS regression gate in CI** | Block deploys if scores drop below stored baseline |
+| 1 | **GitHub Actions deploy pipeline (Plan C)** | Automated build → RAGAS gate → EC2 deploy on merge |
+| 2 | **v3 retrieval: MMR post-reranking** | q_029 — single-source diversity failure |
+| 3 | **v3 retrieval: query decomposition + BM25 entity expansion** | q_032 — vocabulary mismatch on cross-paper queries |
+| 4 | **Multi-hop retrieval** | q_033, q_034 — second hop not retrieved |
+| 5 | **Table-aware PDF ingestion** | q_039 — only persistent full DK |

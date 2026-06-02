@@ -94,7 +94,7 @@ class Settings(BaseSettings):
     langsmith_project: str
 
     # Cross-cutting — used in tracing tags, evaluation snapshots, experiment metadata
-    pipeline_version: str = "v1-baseline"
+    pipeline_version: str
 
     # App config groups — have defaults, overridable via env (e.g. DB__COLLECTION_NAME=foo)
     data: DataConfig = DataConfig()
