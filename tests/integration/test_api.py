@@ -74,9 +74,24 @@ class TestQueryEndpoint:
         response = client.post("/query", json={})
         assert response.status_code == 422
 
-    def test_empty_question_is_accepted(self, client: TestClient) -> None:
-        # validation of question content is teh LLM's job, not teh API's
+    def test_empty_question_returns_422(self, client: TestClient) -> None:
         response = client.post("/query", json={"question": ""})
+        assert response.status_code == 422
+
+    def test_whitespace_only_question_returns_422(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "   "})
+        assert response.status_code == 422
+
+    def test_too_short_question_returns_422(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "ab"})
+        assert response.status_code == 422
+
+    def test_oversized_question_returns_422(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "x" * 1001})
+        assert response.status_code == 422
+
+    def test_valid_length_question_returns_200(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "What is attention?"})
         assert response.status_code == 200
 
     def test_retriever_called_with_question(self) -> None:

@@ -1,11 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import FastAPI, HTTPException
 from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from src.config.config import settings
 from src.config.logging_config import setup_api_logging
@@ -29,7 +30,14 @@ chain = RAGChain(model=settings.generation.model)
 
 
 class QueryRequest(BaseModel):
-    question: str
+    question: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=settings.api.query_min_length,
+            max_length=settings.api.query_max_length,
+        ),
+    ]
 
 
 class SourceChunk(BaseModel):
