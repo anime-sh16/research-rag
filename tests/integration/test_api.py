@@ -145,6 +145,24 @@ class TestQueryEndpoint:
                 "What is LoRA?", FAKE_CHUNKS, prompt_version=None
             )
 
+    def test_upstream_timeout_returns_503_structured(self, client: TestClient) -> None:
+        with patch("src.api.main.retriever") as mock_retriever:
+            mock_retriever.retrieve.side_effect = TimeoutError("upstream slow")
+            response = client.post("/query", json={"question": "What is attention?"})
+        assert response.status_code == 503
+        body = response.json()["detail"]
+        assert body["error"] == "service_unavailable"
+        assert "upstream slow" not in str(body)
+
+    def test_unexpected_error_returns_500_structured(self, client: TestClient) -> None:
+        with patch("src.api.main.retriever") as mock_retriever:
+            mock_retriever.retrieve.side_effect = ValueError("SECRET-STACK-TRACE")
+            response = client.post("/query", json={"question": "What is attention?"})
+        assert response.status_code == 500
+        body = response.json()["detail"]
+        assert body["error"] == "internal_error"
+        assert "SECRET-STACK-TRACE" not in str(response.json())
+
 
 class TestHealthEndpoint:
     def test_returns_200(self, client: TestClient) -> None:

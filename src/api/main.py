@@ -8,7 +8,7 @@ from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
 from pydantic import BaseModel, StringConstraints
 
-from src.api.errors import OFF_DOMAIN_MESSAGE
+from src.api.errors import OFF_DOMAIN_MESSAGE, map_exception
 from src.config.config import settings
 from src.config.logging_config import setup_api_logging
 from src.generation.chain import RAGChain
@@ -151,7 +151,8 @@ def query(request: QueryRequest) -> QueryResponse:
         result = run_pipeline(request.question)
     except Exception as e:
         logger.exception("Query pipeline failed for: '%s'", request.question)
-        raise HTTPException(status_code=503, detail=str(e))
+        status_code, error_body = map_exception(e)
+        raise HTTPException(status_code=status_code, detail=error_body.model_dump())
     logger.info("Returning answer with %d sources.", len(result["sources"]))
     sources = [
         SourceChunk(
