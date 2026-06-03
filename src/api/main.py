@@ -8,10 +8,11 @@ from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
 from pydantic import BaseModel, StringConstraints
 
+from src.api.errors import OFF_DOMAIN_MESSAGE
 from src.config.config import settings
 from src.config.logging_config import setup_api_logging
 from src.generation.chain import RAGChain
-from src.retrieval.retriever import Retriever
+from src.retrieval.retriever import OffDomainQuery, Retriever
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,23 @@ def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
     if run:
         run.name = f"query|{settings.pipeline_version}|{datetime.now().strftime('%m%d_%H%M%S')}"
 
-    chunks = retriever.retrieve(question)
+    try:
+        chunks = retriever.retrieve(question)
+    except OffDomainQuery:
+        if run:
+            run.add_metadata(
+                {
+                    "summary": {
+                        "query": question,
+                        "chunks_retrieved": 0,
+                        "papers_cited": [],
+                        "answer_preview": OFF_DOMAIN_MESSAGE,
+                        "retrieval_method": "hybrid_rerank",
+                        "flag": "off_domain",
+                    }
+                }
+            )
+        return {"answer": OFF_DOMAIN_MESSAGE, "sources": []}
 
     # Handle the empty retrieval edge case gracefully
     if not chunks:

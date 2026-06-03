@@ -116,6 +116,20 @@ class TestQueryEndpoint:
         assert "don't have enough context" in response.json()["answer"].lower()
         assert response.json()["sources"] == []
 
+    def test_off_domain_query_returns_friendly_message(
+        self, client: TestClient
+    ) -> None:
+        from src.retrieval.retriever import OffDomainQuery
+
+        with patch("src.api.main.retriever") as mock_retriever:
+            mock_retriever.retrieve.side_effect = OffDomainQuery()
+            response = client.post(
+                "/query", json={"question": "What is the weather in Tokyo?"}
+            )
+        assert response.status_code == 200
+        assert response.json()["sources"] == []
+        assert "knowledge base" in response.json()["answer"].lower()
+
     def test_chain_called_with_question_and_chunks(self) -> None:
         with (
             patch("src.api.main.retriever") as mock_retriever,
