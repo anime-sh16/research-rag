@@ -428,10 +428,11 @@ class TestExtractSubquery:
         self._mock_llm_response(
             retriever,
             Query(
+                is_research_query=True,
                 subquery=[
                     Subquery(query="q1", expansion_terms=["t1"]),
                     Subquery(query="q2", expansion_terms=["t2", "t3"]),
-                ]
+                ],
             ),
         )
 
@@ -442,6 +443,7 @@ class TestExtractSubquery:
         assert all(isinstance(sq, dict) for sq in result["subquery"])
         assert result["subquery"][0]["query"] == "q1"
         assert result["subquery"][1]["expansion_terms"] == ["t2", "t3"]
+        assert result["is_research_query"] is True
 
 
 class TestExtractSubqueryIntegrationWithRetrieve:
