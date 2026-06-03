@@ -533,18 +533,7 @@ uv run ruff format .
 
 ## Next Steps
 
-### Priority 1 — Production hardening (the request edge)
-
-The system is publicly reachable and calls paid/rate-limited APIs (Gemini + Jina) on every request, but the request edge is currently unguarded. Harden it before further quality work:
-
-| Task | Addresses |
-|---|---|
-| **Off-domain query classification** | Reject non-ML-research questions early (preferably folded into the existing decomposition LLM call → no extra latency) with a friendly "ask a paper-related question" response, instead of running the full embed→search→rerank→generate pipeline. Saves cost + improves UX. |
-| **Input validation** | `QueryRequest.question` is an unconstrained `str` — add min/max length so empty or oversized inputs are rejected (422) before billing the pipeline. |
-| **Rate limiting** | No per-IP limiting today; a public URL + free-tier API quotas means a crawler or loop can exhaust Gemini/Jina in minutes. Add per-IP limits (e.g. slowapi). |
-| **Clean error responses** | `except Exception … detail=str(e)` leaks internal exception text to clients and always returns 503. Map exceptions to correct status codes, return a structured error model, log full detail server-side only. |
-
-### Priority 2 — Security & ops (follow-up)
+### Priority 1 — Security & ops (follow-up)
 
 | Task | Addresses |
 |---|---|
@@ -553,7 +542,7 @@ The system is publicly reachable and calls paid/rate-limited APIs (Gemini + Jina
 | **RAGAS gate wired into deploy** | Gate currently opt-in via `workflow_dispatch`; decide whether (and how, given API cost) to make it block automatic merge-to-`main` deploys. |
 | **Cost/token observability** | Surface per-request token + $ cost (already traced to LangSmith) for ops visibility and as a portfolio talking point. |
 
-### Priority 3 — Retrieval & answer quality
+### Priority 2 — Retrieval & answer quality
 
 | Task | Addresses |
 |---|---|
@@ -562,4 +551,4 @@ The system is publicly reachable and calls paid/rate-limited APIs (Gemini + Jina
 | **Table-aware PDF ingestion** | q_039 — only persistent full DK; table data lost at chunk boundary |
 | **Vocabulary mismatch / embedding gap** | q_032 — QServe/AWQ terms not matched despite BM25 expansion |
 
-**Completed:** CI/CD pipeline (Plan C) ✓ | Query decomposition + BM25 expansion (v3) ✓ | Prefetch scaling (v3.1.1) ✓
+**Completed:** CI/CD pipeline (Plan C) ✓ | Query decomposition + BM25 expansion (v3) ✓ | Prefetch scaling (v3.1.1) ✓ | Request-edge hardening — input validation (422), off-domain rejection (folded into decomposition, no added latency), per-IP rate limiting (slowapi), structured leak-free error responses ✓
