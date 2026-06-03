@@ -164,6 +164,31 @@ class TestQueryEndpoint:
         assert "SECRET-STACK-TRACE" not in str(response.json())
 
 
+class TestRateLimiting:
+    def test_sixth_request_per_minute_is_rate_limited(self) -> None:
+        from src.api.main import app, limiter
+
+        limiter.enabled = True
+        try:
+            with (
+                patch("src.api.main.retriever") as mock_retriever,
+                patch("src.api.main.chain") as mock_chain,
+            ):
+                mock_retriever.retrieve.return_value = FAKE_CHUNKS
+                mock_chain.generate.return_value = FAKE_ANSWER
+                c = TestClient(app)
+                statuses = [
+                    c.post(
+                        "/query", json={"question": "What is attention?"}
+                    ).status_code
+                    for _ in range(6)
+                ]
+        finally:
+            limiter.enabled = False
+        assert statuses[:5] == [200, 200, 200, 200, 200]
+        assert statuses[5] == 429
+
+
 class TestHealthEndpoint:
     def test_returns_200(self, client: TestClient) -> None:
         response = client.get("/health")

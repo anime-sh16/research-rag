@@ -3,10 +3,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
 from pydantic import BaseModel, StringConstraints
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from src.api.errors import OFF_DOMAIN_MESSAGE, map_exception
 from src.config.config import settings
@@ -25,6 +28,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.api.title, lifespan=lifespan)
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    enabled=settings.api.rate_limit_enabled,
+    headers_enabled=True,
+)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 retriever = Retriever(top_k=settings.generation.top_k)
 chain = RAGChain(model=settings.generation.model)
@@ -145,12 +156,14 @@ def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
 
 
 @app.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest) -> QueryResponse:
-    logger.info("Received query: '%s'", request.question)
+@limiter.limit(f"{settings.api.rate_limit_per_minute}/minute")
+@limiter.limit(f"{settings.api.rate_limit_per_day}/day")
+def query(request: Request, response: Response, body: QueryRequest) -> QueryResponse:
+    logger.info("Received query: '%s'", body.question)
     try:
-        result = run_pipeline(request.question)
+        result = run_pipeline(body.question)
     except Exception as e:
-        logger.exception("Query pipeline failed for: '%s'", request.question)
+        logger.exception("Query pipeline failed for: '%s'", body.question)
         status_code, error_body = map_exception(e)
         raise HTTPException(status_code=status_code, detail=error_body.model_dump())
     logger.info("Returning answer with %d sources.", len(result["sources"]))

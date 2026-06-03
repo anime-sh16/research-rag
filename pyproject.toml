@@ -28,6 +28,7 @@ dependencies = [
     "ragas>=0.4.3",
     "huggingface-hub>=1.6.0",
     "streamlit>=1.40",
+    "slowapi>=0.1.9",
 ]
 
 [dependency-groups]
