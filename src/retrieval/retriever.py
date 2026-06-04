@@ -91,10 +91,12 @@ _JINA_RERANK_URL = settings.jina_rerank_url
 QUERY_ANALYSIS_PROMPT = """You are a search query analyzer for an ML research paper retrieval system.
 
 Given a user query, your job is to:
+0. Classify whether the query is about ML/AI research. Set is_research_query to false ONLY when the query is clearly off-topic for an ML research corpus (e.g. weather, general chit-chat, jokes, cooking, unrelated coding help). When in doubt, set it to true — prefer answering over rejecting.
 1. Determine if the query asks about MULTIPLE DISTINCT topics/papers/methods. If so, decompose into separate sub-queries — one per topic.
 2. For EACH sub-query, extract expansion terms: domain-specific synonyms, abbreviations, related technical jargon, or alternative names that authors might use in their papers instead of the terms in the query.
 
 Rules:
+- If is_research_query is false, return an empty subquery list and skip expansion.
 - If the query is about a SINGLE topic, return exactly ONE sub-query with the original query text.
 - Do NOT rephrase or simplify the sub-queries. Keep them close to the original wording, just scoped to one topic each.
 - Each sub-query MUST explicitly name the entity/method/model it refers to. Never use pronouns ("they", "it", "this approach") or implicit references that rely on the other sub-query for context. Each sub-query must be understandable on its own.
@@ -103,10 +105,17 @@ Rules:
 
 Examples:
 Query: "What is the role of knowledge distillation in MobileBERT?"
-→ Single topic. One sub-query. Expansion: knowledge distillation, teacher-student, model compression, bottleneck layers, inverted bottleneck.
+→ is_research_query: true. Single topic. One sub-query. Expansion: knowledge distillation, teacher-student, model compression, bottleneck layers, inverted bottleneck.
+
+Query: "What's the weather in Tokyo today?"
+→ is_research_query: false. Empty subquery list.
 
 Query: "How does LoRA fine-tuning compare to prefix tuning, and what mixture-of-experts routing strategy does Switch Transformer use?"
-→ Two distinct topics. Sub-query 1: LoRA vs prefix tuning for fine-tuning (expansion: low-rank adaptation, soft prompts, parameter-efficient, PEFT, adapter layers). Sub-query 2: Switch Transformer routing strategy (expansion: mixture-of-experts, MoE, top-k gating, expert capacity, load balancing, sparse activation)."""
+→ is_research_query: true. Two distinct topics. Sub-query 1: LoRA vs prefix tuning for fine-tuning (expansion: low-rank adaptation, soft prompts, parameter-efficient, PEFT, adapter layers). Sub-query 2: Switch Transformer routing strategy (expansion: mixture-of-experts, MoE, top-k gating, expert capacity, load balancing, sparse activation)."""
+
+
+class OffDomainQuery(Exception):
+    """Signal: query classified as outside the ML-research domain. Not an error."""
 
 
 # Pydantic schemas for structured LLM output
@@ -121,11 +130,20 @@ class Subquery(BaseModel):
 
 
 class Query(BaseModel):
+    is_research_query: bool = Field(
+        ...,
+        description=(
+            "True if the query is about ML/AI research (methods, models, papers,"
+            " findings). False ONLY if clearly off-topic (e.g. weather, jokes,"
+            " coding help). When uncertain, return True."
+        ),
+    )
     subquery: list[Subquery] = Field(
         ...,
         description=(
             "The subquery to search for. Each subquery has a query and a list"
-            " of expansion terms. May be one or more subqueries."
+            " of expansion terms. May be one or more subqueries. May be empty if"
+            " is_research_query is False."
         ),
     )
 
@@ -377,6 +395,14 @@ class Retriever:
                 "Sub-query extraction failed for query '%s': %s. Skipping.", query, e
             )
             extraction = {"subquery": [{"query": query, "expansion_terms": []}]}
+
+        if not extraction.get("is_research_query", True):
+            logger.info("Query classified off-domain, rejecting: '%s'", query)
+            run = get_current_run_tree()
+            if run:
+                run.add_tags(["off_domain"])
+            raise OffDomainQuery()
+
         sub_queries = extraction["subquery"]
         logger.info(
             "Query decomposed into %d sub-queries: %s",

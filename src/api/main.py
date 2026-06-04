@@ -1,16 +1,21 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
+from src.api.errors import OFF_DOMAIN_MESSAGE, map_exception
 from src.config.config import settings
 from src.config.logging_config import setup_api_logging
 from src.generation.chain import RAGChain
-from src.retrieval.retriever import Retriever
+from src.retrieval.retriever import OffDomainQuery, Retriever
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +29,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.api.title, lifespan=lifespan)
 
+limiter = Limiter(
+    key_func=get_remote_address,
+    enabled=settings.api.rate_limit_enabled,
+    headers_enabled=True,
+)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 retriever = Retriever(top_k=settings.generation.top_k)
 chain = RAGChain(model=settings.generation.model)
 
 
 class QueryRequest(BaseModel):
-    question: str
+    question: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True,
+            min_length=settings.api.query_min_length,
+            max_length=settings.api.query_max_length,
+        ),
+    ]
 
 
 class SourceChunk(BaseModel):
@@ -65,7 +85,23 @@ def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
     if run:
         run.name = f"query|{settings.pipeline_version}|{datetime.now().strftime('%m%d_%H%M%S')}"
 
-    chunks = retriever.retrieve(question)
+    try:
+        chunks = retriever.retrieve(question)
+    except OffDomainQuery:
+        if run:
+            run.add_metadata(
+                {
+                    "summary": {
+                        "query": question,
+                        "chunks_retrieved": 0,
+                        "papers_cited": [],
+                        "answer_preview": OFF_DOMAIN_MESSAGE,
+                        "retrieval_method": "hybrid_rerank",
+                        "flag": "off_domain",
+                    }
+                }
+            )
+        return {"answer": OFF_DOMAIN_MESSAGE, "sources": []}
 
     # Handle the empty retrieval edge case gracefully
     if not chunks:
@@ -120,13 +156,16 @@ def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
 
 
 @app.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest) -> QueryResponse:
-    logger.info("Received query: '%s'", request.question)
+@limiter.limit(f"{settings.api.rate_limit_per_minute}/minute")
+@limiter.limit(f"{settings.api.rate_limit_per_day}/day")
+def query(request: Request, response: Response, body: QueryRequest) -> QueryResponse:
+    logger.info("Received query: '%s'", body.question)
     try:
-        result = run_pipeline(request.question)
+        result = run_pipeline(body.question)
     except Exception as e:
-        logger.exception("Query pipeline failed for: '%s'", request.question)
-        raise HTTPException(status_code=503, detail=str(e))
+        logger.exception("Query pipeline failed for: '%s'", body.question)
+        status_code, error_body = map_exception(e)
+        raise HTTPException(status_code=status_code, detail=error_body.model_dump())
     logger.info("Returning answer with %d sources.", len(result["sources"]))
     sources = [
         SourceChunk(

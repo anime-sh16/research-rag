@@ -75,6 +75,12 @@ class GenerationConfig(BaseModel):
 
 class APIConfig(BaseModel):
     title: str = "ArXiv RAG API"
+    # Request-edge hardening (Priority 1)
+    rate_limit_enabled: bool = True
+    rate_limit_per_minute: int = 5
+    rate_limit_per_day: int = 50
+    query_min_length: int = 3
+    query_max_length: int = 1000
 
 
 class RetrievalConfig(BaseModel):

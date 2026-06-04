@@ -74,9 +74,24 @@ class TestQueryEndpoint:
         response = client.post("/query", json={})
         assert response.status_code == 422
 
-    def test_empty_question_is_accepted(self, client: TestClient) -> None:
-        # validation of question content is teh LLM's job, not teh API's
+    def test_empty_question_returns_422(self, client: TestClient) -> None:
         response = client.post("/query", json={"question": ""})
+        assert response.status_code == 422
+
+    def test_whitespace_only_question_returns_422(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "   "})
+        assert response.status_code == 422
+
+    def test_too_short_question_returns_422(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "ab"})
+        assert response.status_code == 422
+
+    def test_oversized_question_returns_422(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "x" * 1001})
+        assert response.status_code == 422
+
+    def test_valid_length_question_returns_200(self, client: TestClient) -> None:
+        response = client.post("/query", json={"question": "What is attention?"})
         assert response.status_code == 200
 
     def test_retriever_called_with_question(self) -> None:
@@ -101,6 +116,20 @@ class TestQueryEndpoint:
         assert "don't have enough context" in response.json()["answer"].lower()
         assert response.json()["sources"] == []
 
+    def test_off_domain_query_returns_friendly_message(
+        self, client: TestClient
+    ) -> None:
+        from src.retrieval.retriever import OffDomainQuery
+
+        with patch("src.api.main.retriever") as mock_retriever:
+            mock_retriever.retrieve.side_effect = OffDomainQuery()
+            response = client.post(
+                "/query", json={"question": "What is the weather in Tokyo?"}
+            )
+        assert response.status_code == 200
+        assert response.json()["sources"] == []
+        assert "knowledge base" in response.json()["answer"].lower()
+
     def test_chain_called_with_question_and_chunks(self) -> None:
         with (
             patch("src.api.main.retriever") as mock_retriever,
@@ -115,6 +144,49 @@ class TestQueryEndpoint:
             mock_chain.generate.assert_called_once_with(
                 "What is LoRA?", FAKE_CHUNKS, prompt_version=None
             )
+
+    def test_upstream_timeout_returns_503_structured(self, client: TestClient) -> None:
+        with patch("src.api.main.retriever") as mock_retriever:
+            mock_retriever.retrieve.side_effect = TimeoutError("upstream slow")
+            response = client.post("/query", json={"question": "What is attention?"})
+        assert response.status_code == 503
+        body = response.json()["detail"]
+        assert body["error"] == "service_unavailable"
+        assert "upstream slow" not in str(body)
+
+    def test_unexpected_error_returns_500_structured(self, client: TestClient) -> None:
+        with patch("src.api.main.retriever") as mock_retriever:
+            mock_retriever.retrieve.side_effect = ValueError("SECRET-STACK-TRACE")
+            response = client.post("/query", json={"question": "What is attention?"})
+        assert response.status_code == 500
+        body = response.json()["detail"]
+        assert body["error"] == "internal_error"
+        assert "SECRET-STACK-TRACE" not in str(response.json())
+
+
+class TestRateLimiting:
+    def test_sixth_request_per_minute_is_rate_limited(self) -> None:
+        from src.api.main import app, limiter
+
+        limiter.enabled = True
+        try:
+            with (
+                patch("src.api.main.retriever") as mock_retriever,
+                patch("src.api.main.chain") as mock_chain,
+            ):
+                mock_retriever.retrieve.return_value = FAKE_CHUNKS
+                mock_chain.generate.return_value = FAKE_ANSWER
+                c = TestClient(app)
+                statuses = [
+                    c.post(
+                        "/query", json={"question": "What is attention?"}
+                    ).status_code
+                    for _ in range(6)
+                ]
+        finally:
+            limiter.enabled = False
+        assert statuses[:5] == [200, 200, 200, 200, 200]
+        assert statuses[5] == 429
 
 
 class TestHealthEndpoint:
