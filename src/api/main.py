@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Annotated
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from langsmith import traceable
 from langsmith.run_helpers import get_current_run_tree
@@ -23,8 +24,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_api_logging()
+    # Clients are constructed here, not at import time, so importing this module
+    # has no side effects and startup/shutdown of network connections is explicit.
+    app.state.retriever = Retriever(
+        top_k=settings.generation.top_k, http_client=httpx.AsyncClient()
+    )
+    app.state.chain = RAGChain(model=settings.generation.model)
     logger.info("API server started. Logging to logs/api/api.log")
     yield
+    await app.state.retriever.aclose()
 
 
 app = FastAPI(title=settings.api.title, lifespan=lifespan)
@@ -36,9 +44,6 @@ limiter = Limiter(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-retriever = Retriever(top_k=settings.generation.top_k)
-chain = RAGChain(model=settings.generation.model)
 
 
 class QueryRequest(BaseModel):
@@ -78,7 +83,7 @@ class QueryResponse(BaseModel):
         "retrieval_method:hybrid_rerank",
     ],
 )
-def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
+async def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
     """Core orchestration logic, decoupled from HTTP for easier evaluation."""
     run = get_current_run_tree()
 
@@ -86,7 +91,7 @@ def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
         run.name = f"query|{settings.pipeline_version}|{datetime.now().strftime('%m%d_%H%M%S')}"
 
     try:
-        chunks = retriever.retrieve(question)
+        chunks = await app.state.retriever.retrieve(question)
     except OffDomainQuery:
         if run:
             run.add_metadata(
@@ -120,7 +125,9 @@ def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
             )
         return {"answer": "I don't have enough context to answer that.", "sources": []}
 
-    answer = chain.generate(question, chunks, prompt_version=prompt_version)
+    answer = await app.state.chain.generate(
+        question, chunks, prompt_version=prompt_version
+    )
 
     # Add a human-readable summary to the Root Span
     if run:
@@ -158,10 +165,12 @@ def run_pipeline(question: str, prompt_version: str | None = None) -> dict:
 @app.post("/query", response_model=QueryResponse)
 @limiter.limit(f"{settings.api.rate_limit_per_minute}/minute")
 @limiter.limit(f"{settings.api.rate_limit_per_day}/day")
-def query(request: Request, response: Response, body: QueryRequest) -> QueryResponse:
+async def query(
+    request: Request, response: Response, body: QueryRequest
+) -> QueryResponse:
     logger.info("Received query: '%s'", body.question)
     try:
-        result = run_pipeline(body.question)
+        result = await run_pipeline(body.question)
     except Exception as e:
         logger.exception("Query pipeline failed for: '%s'", body.question)
         status_code, error_body = map_exception(e)

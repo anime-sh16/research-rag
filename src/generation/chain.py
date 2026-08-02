@@ -140,7 +140,7 @@ class RAGChain:
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
-    def generate(
+    async def generate(
         self, query: str, chunks: list[dict], prompt_version: str | None = None
     ) -> str:
         system_instruction, template, resolved_version = self._resolve_prompt(
@@ -169,7 +169,7 @@ class RAGChain:
             )
             run.add_tags([f"prompt_version:{resolved_version}"])
 
-        response = self.client.models.generate_content(
+        response = await self.client.aio.models.generate_content(
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(

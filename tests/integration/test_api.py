@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,19 +25,29 @@ FAKE_CHUNKS = [
 FAKE_ANSWER = "Transformers use self-attention to process sequences."
 
 
+def _mock_retriever() -> MagicMock:
+    mock = MagicMock()
+    mock.retrieve = AsyncMock(return_value=FAKE_CHUNKS)
+    return mock
+
+
+def _mock_chain() -> MagicMock:
+    mock = MagicMock()
+    mock.generate = AsyncMock(return_value=FAKE_ANSWER)
+    return mock
+
+
 @pytest.fixture
 def client():
-    """TestClient with teh module-level retriever and chain instances patched."""
-    with (
-        patch("src.api.main.retriever") as mock_retriever,
-        patch("src.api.main.chain") as mock_chain,
-    ):
-        mock_retriever.retrieve.return_value = FAKE_CHUNKS
-        mock_chain.generate.return_value = FAKE_ANSWER
+    """TestClient with app.state.retriever/chain (normally set by lifespan) stubbed
+    directly — bare TestClient(app) never triggers FastAPI's lifespan, so nothing
+    else would populate them."""
+    from src.api.main import app
 
-        from src.api.main import app
+    app.state.retriever = _mock_retriever()
+    app.state.chain = _mock_chain()
 
-        yield TestClient(app)
+    yield TestClient(app)
 
 
 class TestQueryEndpoint:
@@ -95,23 +105,21 @@ class TestQueryEndpoint:
         assert response.status_code == 200
 
     def test_retriever_called_with_question(self) -> None:
-        with (
-            patch("src.api.main.retriever") as mock_retriever,
-            patch("src.api.main.chain") as mock_chain,
-        ):
-            mock_retriever.retrieve.return_value = FAKE_CHUNKS
-            mock_chain.generate.return_value = FAKE_ANSWER
-            from src.api.main import app
+        from src.api.main import app
 
-            c = TestClient(app)
-            c.post("/query", json={"question": "What is LoRA?"})
-            mock_retriever.retrieve.assert_called_once_with("What is LoRA?")
+        app.state.retriever = _mock_retriever()
+        app.state.chain = _mock_chain()
+
+        c = TestClient(app)
+        c.post("/query", json={"question": "What is LoRA?"})
+        app.state.retriever.retrieve.assert_called_once_with("What is LoRA?")
 
     def test_empty_retrieval_returns_fallback_answer(self, client: TestClient) -> None:
         """run_pipeline short-circuits with a fallback message when retrieval is empty."""
-        with patch("src.api.main.retriever") as mock_retriever:
-            mock_retriever.retrieve.return_value = []
-            response = client.post("/query", json={"question": "Unknown topic?"})
+        from src.api.main import app
+
+        app.state.retriever.retrieve = AsyncMock(return_value=[])
+        response = client.post("/query", json={"question": "Unknown topic?"})
         assert response.status_code == 200
         assert "don't have enough context" in response.json()["answer"].lower()
         assert response.json()["sources"] == []
@@ -119,45 +127,48 @@ class TestQueryEndpoint:
     def test_off_domain_query_returns_friendly_message(
         self, client: TestClient
     ) -> None:
+        from src.api.main import app
         from src.retrieval.retriever import OffDomainQuery
 
-        with patch("src.api.main.retriever") as mock_retriever:
-            mock_retriever.retrieve.side_effect = OffDomainQuery()
-            response = client.post(
-                "/query", json={"question": "What is the weather in Tokyo?"}
-            )
+        app.state.retriever.retrieve = AsyncMock(side_effect=OffDomainQuery())
+        response = client.post(
+            "/query", json={"question": "What is the weather in Tokyo?"}
+        )
         assert response.status_code == 200
         assert response.json()["sources"] == []
         assert "knowledge base" in response.json()["answer"].lower()
 
     def test_chain_called_with_question_and_chunks(self) -> None:
-        with (
-            patch("src.api.main.retriever") as mock_retriever,
-            patch("src.api.main.chain") as mock_chain,
-        ):
-            mock_retriever.retrieve.return_value = FAKE_CHUNKS
-            mock_chain.generate.return_value = FAKE_ANSWER
-            from src.api.main import app
+        from src.api.main import app
 
-            c = TestClient(app)
-            c.post("/query", json={"question": "What is LoRA?"})
-            mock_chain.generate.assert_called_once_with(
-                "What is LoRA?", FAKE_CHUNKS, prompt_version=None
-            )
+        app.state.retriever = _mock_retriever()
+        app.state.chain = _mock_chain()
+
+        c = TestClient(app)
+        c.post("/query", json={"question": "What is LoRA?"})
+        app.state.chain.generate.assert_called_once_with(
+            "What is LoRA?", FAKE_CHUNKS, prompt_version=None
+        )
 
     def test_upstream_timeout_returns_503_structured(self, client: TestClient) -> None:
-        with patch("src.api.main.retriever") as mock_retriever:
-            mock_retriever.retrieve.side_effect = TimeoutError("upstream slow")
-            response = client.post("/query", json={"question": "What is attention?"})
+        from src.api.main import app
+
+        app.state.retriever.retrieve = AsyncMock(
+            side_effect=TimeoutError("upstream slow")
+        )
+        response = client.post("/query", json={"question": "What is attention?"})
         assert response.status_code == 503
         body = response.json()["detail"]
         assert body["error"] == "service_unavailable"
         assert "upstream slow" not in str(body)
 
     def test_unexpected_error_returns_500_structured(self, client: TestClient) -> None:
-        with patch("src.api.main.retriever") as mock_retriever:
-            mock_retriever.retrieve.side_effect = ValueError("SECRET-STACK-TRACE")
-            response = client.post("/query", json={"question": "What is attention?"})
+        from src.api.main import app
+
+        app.state.retriever.retrieve = AsyncMock(
+            side_effect=ValueError("SECRET-STACK-TRACE")
+        )
+        response = client.post("/query", json={"question": "What is attention?"})
         assert response.status_code == 500
         body = response.json()["detail"]
         assert body["error"] == "internal_error"
@@ -169,24 +180,46 @@ class TestRateLimiting:
         from src.api.main import app, limiter
 
         limiter.enabled = True
+        app.state.retriever = _mock_retriever()
+        app.state.chain = _mock_chain()
         try:
-            with (
-                patch("src.api.main.retriever") as mock_retriever,
-                patch("src.api.main.chain") as mock_chain,
-            ):
-                mock_retriever.retrieve.return_value = FAKE_CHUNKS
-                mock_chain.generate.return_value = FAKE_ANSWER
-                c = TestClient(app)
-                statuses = [
-                    c.post(
-                        "/query", json={"question": "What is attention?"}
-                    ).status_code
-                    for _ in range(6)
-                ]
+            c = TestClient(app)
+            statuses = [
+                c.post("/query", json={"question": "What is attention?"}).status_code
+                for _ in range(6)
+            ]
         finally:
             limiter.enabled = False
         assert statuses[:5] == [200, 200, 200, 200, 200]
         assert statuses[5] == 429
+
+
+class TestLifespan:
+    """lifespan() is what fixes the import-time client construction problem:
+    clients must be built on startup (not on import) and released on shutdown."""
+
+    async def test_lifespan_constructs_clients_and_sets_app_state(self) -> None:
+        from src.api.main import app, lifespan
+
+        mock_retriever = MagicMock()
+        mock_retriever.aclose = AsyncMock()
+        mock_chain = MagicMock()
+
+        with (
+            patch(
+                "src.api.main.Retriever", return_value=mock_retriever
+            ) as MockRetriever,
+            patch("src.api.main.RAGChain", return_value=mock_chain) as MockChain,
+            patch("src.api.main.httpx.AsyncClient", return_value=MagicMock()),
+        ):
+            async with lifespan(app):
+                assert app.state.retriever is mock_retriever
+                assert app.state.chain is mock_chain
+                MockRetriever.assert_called_once()
+                MockChain.assert_called_once()
+
+            # Shutdown must release the retriever's connections.
+            mock_retriever.aclose.assert_awaited_once()
 
 
 class TestHealthEndpoint:
