@@ -8,7 +8,7 @@ from datetime import datetime
 import instructor
 from google import genai
 from google.genai import types
-from langsmith import evaluate
+from langsmith.evaluation import aevaluate
 from langsmith.schemas import Example, Run
 from ragas.embeddings.base import embedding_factory
 from ragas.llms.base import InstructorLLM
@@ -19,7 +19,7 @@ from ragas.metrics.collections import (
     Faithfulness,
 )
 
-from src.api.main import run_pipeline
+from src.api.main import app, lifespan, run_pipeline
 from src.config.config import settings
 
 # Suppress noisy third-party loggers
@@ -66,8 +66,8 @@ _context_recall = ContextRecall(llm=_evaluator_llm)
 def make_target(prompt_version: str | None = None):
     """Return a target function that uses the specified prompt variant."""
 
-    def target(inputs: dict) -> dict:
-        result = run_pipeline(inputs["question"], prompt_version=prompt_version)
+    async def target(inputs: dict) -> dict:
+        result = await run_pipeline(inputs["question"], prompt_version=prompt_version)
         contexts = [chunk["text"] for chunk in result["sources"] if chunk.get("text")]
         retrieved_sources = [
             {
@@ -225,6 +225,34 @@ def _save_snapshot(experiment_name: str, results) -> str:
     return str(snapshot_path)
 
 
+async def _run_aevaluate(
+    experiment_name: str, dataset_name: str, prompt_version: str | None
+) -> list:
+    """Populate app.state (retriever/chain) via the API's lifespan, then evaluate.
+
+    run_pipeline reads its clients from app.state, which is normally populated by
+    uvicorn invoking FastAPI's lifespan on startup. This script calls run_pipeline
+    directly, bypassing uvicorn entirely, so it has to drive that lifespan itself.
+    """
+    async with lifespan(app):
+        results = await aevaluate(
+            make_target(prompt_version),
+            data=dataset_name,
+            evaluators=[
+                eval_faithfulness,
+                eval_answer_relevancy,
+                eval_context_precision,
+                eval_context_recall,
+            ],
+            experiment_prefix=experiment_name,
+            metadata={
+                "eval_run": True,
+                "pipeline_version": settings.pipeline_version,
+            },
+        )
+        return [row async for row in results]
+
+
 def run_evaluation(experiment_name: str, prompt_version: str | None = None) -> None:
     """Run RAGAS evaluation on the fixed eval set and save results."""
     dataset_name = settings.evaluation.dataset_name
@@ -234,23 +262,9 @@ def run_evaluation(experiment_name: str, prompt_version: str | None = None) -> N
     logger.info("Model      : %s", settings.evaluation.evaluator_model)
     logger.info("Prompt     : %s", prompt_version or "default")
 
-    results = evaluate(
-        make_target(prompt_version),
-        data=dataset_name,
-        evaluators=[
-            eval_faithfulness,
-            eval_answer_relevancy,
-            eval_context_precision,
-            eval_context_recall,
-        ],
-        experiment_prefix=experiment_name,
-        metadata={
-            "eval_run": True,
-            "pipeline_version": settings.pipeline_version,
-        },
-    )
+    rows = asyncio.run(_run_aevaluate(experiment_name, dataset_name, prompt_version))
 
-    snapshot_path = _save_snapshot(experiment_name, results)
+    snapshot_path = _save_snapshot(experiment_name, rows)
     logger.info("Snapshot   : %s", snapshot_path)
 
     with open(snapshot_path) as f:
