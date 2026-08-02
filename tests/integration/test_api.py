@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -192,6 +192,34 @@ class TestRateLimiting:
             limiter.enabled = False
         assert statuses[:5] == [200, 200, 200, 200, 200]
         assert statuses[5] == 429
+
+
+class TestLifespan:
+    """lifespan() is what fixes the import-time client construction problem:
+    clients must be built on startup (not on import) and released on shutdown."""
+
+    async def test_lifespan_constructs_clients_and_sets_app_state(self) -> None:
+        from src.api.main import app, lifespan
+
+        mock_retriever = MagicMock()
+        mock_retriever.aclose = AsyncMock()
+        mock_chain = MagicMock()
+
+        with (
+            patch(
+                "src.api.main.Retriever", return_value=mock_retriever
+            ) as MockRetriever,
+            patch("src.api.main.RAGChain", return_value=mock_chain) as MockChain,
+            patch("src.api.main.httpx.AsyncClient", return_value=MagicMock()),
+        ):
+            async with lifespan(app):
+                assert app.state.retriever is mock_retriever
+                assert app.state.chain is mock_chain
+                MockRetriever.assert_called_once()
+                MockChain.assert_called_once()
+
+            # Shutdown must release the retriever's connections.
+            mock_retriever.aclose.assert_awaited_once()
 
 
 class TestHealthEndpoint:

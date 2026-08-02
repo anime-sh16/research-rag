@@ -1,6 +1,9 @@
+import asyncio
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from src.config.config import settings
@@ -565,6 +568,109 @@ class TestExtractSubqueryIntegrationWithRetrieve:
         expected_limit = retriever.prefetch_k // 2
         for call in retriever._mock_qdrant.query_points.call_args_list:
             assert call.kwargs["limit"] == expected_limit
+
+    async def test_merges_distinct_results_from_multiple_subqueries(
+        self, retriever
+    ) -> None:
+        """Candidates from every sub-query — not just the first — must reach reranking.
+
+        retrieve() dispatches sub-queries via asyncio.gather, which returns a list
+        of per-subquery result lists; those must be flattened before merging. This
+        pins that flatten step down directly, rather than only checking call counts.
+        """
+        self._setup_embed(retriever)
+        point_a = _fake_qdrant_point(paper_id="paper-A", chunk_index=0)
+        point_b = _fake_qdrant_point(paper_id="paper-B", chunk_index=0)
+        retriever._mock_qdrant.query_points = AsyncMock(
+            side_effect=[
+                MagicMock(points=[point_a]),
+                MagicMock(points=[point_b]),
+            ]
+        )
+        retriever._extract_subquery = AsyncMock(
+            return_value={
+                "subquery": [
+                    {"query": "sub A", "expansion_terms": []},
+                    {"query": "sub B", "expansion_terms": []},
+                ]
+            }
+        )
+        retriever._mock_jina_response.json.return_value = _make_jina_response(
+            [point_a, point_b]
+        )
+
+        await retriever.retrieve("multi-topic query")
+
+        rerank_call = retriever._mock_post.call_args
+        payload = rerank_call.kwargs.get("json") or rerank_call.args[1]
+        assert len(payload["documents"]) == 2
+
+
+class TestConcurrentSubqueryDispatch:
+    """Sub-queries must be dispatched concurrently (asyncio.gather), not sequentially.
+
+    This is the actual point of the sync -> async migration for the retriever: two
+    independent sub-queries should overlap in wall-clock time, not queue up behind
+    each other. A regression to a sequential loop would silently pass every other
+    test in this file (they only check call counts/content, never timing).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _patch_langsmith_run(self):
+        with patch("src.retrieval.retriever.get_current_run_tree", return_value=None):
+            yield
+
+    async def test_two_subqueries_run_concurrently_not_sequentially(
+        self, retriever
+    ) -> None:
+        retriever._extract_subquery = AsyncMock(
+            return_value={
+                "subquery": [
+                    {"query": "sub A", "expansion_terms": []},
+                    {"query": "sub B", "expansion_terms": []},
+                ]
+            }
+        )
+
+        async def _slow_search(*args, **kwargs) -> list:
+            await asyncio.sleep(0.2)
+            return []
+
+        retriever._search_subquery = AsyncMock(side_effect=_slow_search)
+
+        start = time.perf_counter()
+        await retriever.retrieve("multi-topic query")
+        elapsed = time.perf_counter() - start
+
+        # Sequential execution would take ~0.4s (2 x 0.2s); concurrent stays ~0.2s.
+        assert elapsed < 0.3
+
+
+class TestAclose:
+    async def test_aclose_closes_the_real_http_client(self, retriever) -> None:
+        """Use a real httpx.AsyncClient (not a mock) so this checks actual observable
+        state (is_closed), rather than just that a pre-armed mock method got awaited."""
+        real_http_client = httpx.AsyncClient()
+        retriever._http_client = real_http_client
+        retriever.qdrant_client.close = AsyncMock()
+
+        assert real_http_client.is_closed is False
+
+        await retriever.aclose()
+
+        assert real_http_client.is_closed is True
+
+    async def test_aclose_awaits_qdrant_client_close(self, retriever) -> None:
+        """Qdrant client stays mocked here — a real one needs a live connection to
+        construct meaningfully — so this is an interaction check. It still catches a
+        wrong method name, a forgotten call, or a forgotten await, since AsyncMock's
+        assert_awaited_once() fails on all three."""
+        retriever._http_client.aclose = AsyncMock()
+        retriever.qdrant_client.close = AsyncMock()
+
+        await retriever.aclose()
+
+        retriever.qdrant_client.close.assert_awaited_once()
 
 
 class TestEmbedQuery:
