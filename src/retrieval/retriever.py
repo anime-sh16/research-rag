@@ -1,17 +1,17 @@
+import asyncio
 import hashlib
 import json
 import logging
 from pathlib import Path
 
 import httpx
-import requests
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 from langsmith import Client, traceable, wrappers
 from langsmith.run_helpers import get_current_run_tree
 from pydantic import BaseModel, Field
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Document, Fusion, FusionQuery, Prefetch
 from tenacity import (
     before_sleep_log,
@@ -19,6 +19,7 @@ from tenacity import (
     retry_if_exception,
     stop_after_attempt,
     wait_exponential,
+    wait_exponential_jitter,
 )
 
 from src.config.config import settings
@@ -51,6 +52,55 @@ def _is_service_unavailable_error(exc: BaseException) -> bool:
     return isinstance(exc, genai_errors.ServerError) and (
         getattr(exc, "status_code", None) == 503 or "503" in str(exc)
     )
+
+
+def _is_http_rate_limit_error(exc: BaseException) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429
+
+
+def _is_http_service_unavailable_error(exc: BaseException) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 503
+
+
+def _is_http_timeout_error(exc: BaseException) -> bool:
+    return isinstance(exc, (TimeoutError, httpx.TimeoutException))
+
+
+# Composable retry decorator for the Jina rerank HTTP call. Jina's free tier caps
+# concurrent requests at 2 (not RPM/TPM) — a 429 here means "another in-flight
+# request needs to finish first", which clears in seconds, not minutes. Backoff is
+# deliberately much shorter than the Gemini quota-reset backoffs below.
+#
+# The rate-limit layer uses jittered backoff, not plain exponential: when N
+# concurrent requests all get 429'd at the same instant (exactly what happens when
+# more than 2 requests hit rerank simultaneously), plain exponential backoff makes
+# them all wait the same duration and retry in lockstep — colliding again. Jitter
+# spreads their retries out so they don't all re-collide on the same slot.
+_jina_retry = lambda fn: (  # noqa: E731
+    retry(
+        retry=retry_if_exception(_is_http_service_unavailable_error),
+        wait=wait_exponential(multiplier=5, min=5, max=30),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )(
+        retry(
+            retry=retry_if_exception(_is_http_rate_limit_error),
+            wait=wait_exponential_jitter(initial=1, max=10, jitter=2),
+            stop=stop_after_attempt(5),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )(
+            retry(
+                retry=retry_if_exception(_is_http_timeout_error),
+                wait=wait_exponential(multiplier=2, min=2, max=10),
+                stop=stop_after_attempt(3),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            )(fn)
+        )
+    )
+)
 
 
 # Composable retry decorator for all Gemini API calls
@@ -152,8 +202,8 @@ class Query(BaseModel):
 
 
 class Retriever:
-    def __init__(self, top_k: int = 5):
-        self.qdrant_client = QdrantClient(
+    def __init__(self, top_k: int = 5, http_client: httpx.AsyncClient | None = None):
+        self.qdrant_client = AsyncQdrantClient(
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key.get_secret_value(),
             timeout=30,
@@ -175,7 +225,13 @@ class Retriever:
             "Authorization": f"Bearer {settings.jina_api_key.get_secret_value()}",
             "Content-Type": "application/json",
         }
+        self._http_client = http_client or httpx.AsyncClient()
         self._cache = self._load_cache()
+
+    async def aclose(self) -> None:
+        """Release the underlying HTTP and Qdrant connections."""
+        await self._http_client.aclose()
+        await self.qdrant_client.close()
 
     # Embedding cache
 
@@ -212,8 +268,8 @@ class Retriever:
     # Embedding
 
     @_gemini_retry
-    def _embed_query(self, query: str) -> list[float]:
-        response = self.gemini_client.models.embed_content(
+    async def _embed_query(self, query: str) -> list[float]:
+        response = await self.gemini_client.aio.models.embed_content(
             model=settings.db.embedding_model,
             contents=query,
             config=types.EmbedContentConfig(
@@ -227,7 +283,7 @@ class Retriever:
             )
         return response.embeddings[0].values
 
-    def _get_query_vector(self, query: str) -> list[float]:
+    async def _get_query_vector(self, query: str) -> list[float]:
         """Return cached embedding if available, otherwise embed and cache."""
         query_hash = hashlib.md5(query.encode()).hexdigest()
 
@@ -236,7 +292,7 @@ class Retriever:
             return self._cache[query_hash]
 
         logger.debug("Cache miss — embedding query: '%s'", query)
-        embedding = self._embed_query(query)
+        embedding = await self._embed_query(query)
         self._cache[query_hash] = embedding
         self._save_to_cache(query, query_hash, embedding)
         return embedding
@@ -245,7 +301,7 @@ class Retriever:
 
     @traceable(run_type="llm", name="retrieval/query_extraction")
     @_gemini_retry
-    def _extract_subquery(self, query: str) -> dict:
+    async def _extract_subquery(self, query: str) -> dict:
         """Decompose a query into sub-queries with BM25 expansion terms.
 
         Returns a dict matching the Query schema:
@@ -261,7 +317,7 @@ class Retriever:
                 }
             )
 
-        response = self.gemini_client.models.generate_content(
+        response = await self.gemini_client.aio.models.generate_content(
             model=self.query_model,
             contents=f"Query: {query}",
             config=types.GenerateContentConfig(
@@ -287,17 +343,17 @@ class Retriever:
     # Hybrid search
 
     @traceable(run_type="retriever", name="retrieval/subquery_search")
-    def _search_subquery(
+    async def _search_subquery(
         self, sub_query: str, expansion_terms: list[str], prefetch_limit: int
     ) -> list[dict]:
         """Run hybrid search for a single sub-query with BM25 expansion terms."""
-        query_vector = self._get_query_vector(sub_query)
+        query_vector = await self._get_query_vector(sub_query)
 
         bm25_text = sub_query
         if expansion_terms:
             bm25_text = f"{sub_query} {' '.join(expansion_terms)}"
 
-        results = self.qdrant_client.query_points(
+        response = await self.qdrant_client.query_points(
             collection_name=COLLECTION_NAME,
             prefetch=[
                 Prefetch(
@@ -314,7 +370,8 @@ class Retriever:
             query=FusionQuery(fusion=Fusion.RRF),
             limit=prefetch_limit,
             with_payload=True,
-        ).points
+        )
+        results = response.points
 
         return [
             {
@@ -340,12 +397,13 @@ class Retriever:
     # Reranking
 
     @traceable(run_type="tool", name="retrieval/jina_rerank")
-    def _rerank(self, query: str, candidates: list[dict]) -> list[dict]:
+    @_jina_retry
+    async def _rerank(self, query: str, candidates: list[dict]) -> list[dict]:
         """Rerank candidates using Jina Reranker API, return top_k sorted by relevance."""
         if not candidates:
             return candidates
 
-        response = requests.post(
+        response = await self._http_client.post(
             _JINA_RERANK_URL,
             headers=self._jina_headers,
             json={
@@ -384,12 +442,12 @@ class Retriever:
     # -- Main entry point ----------------------------------------------------
 
     @traceable(run_type="retriever", name="retrieval/hybrid_search")
-    def retrieve(self, query: str) -> list[dict]:
+    async def retrieve(self, query: str) -> list[dict]:
         logger.info("Retrieving top-%d chunks for query: '%s'", self.top_k, query)
 
         # Step 1: Query analysis — decompose + extract expansion terms
         try:
-            extraction = self._extract_subquery(query)
+            extraction = await self._extract_subquery(query)
         except Exception as e:
             logger.warning(
                 "Sub-query extraction failed for query '%s': %s. Skipping.", query, e
@@ -410,22 +468,26 @@ class Retriever:
             [sq["query"][:80] for sq in sub_queries],
         )
 
-        # Step 2: Hybrid search per sub-query
+        # Step 2: Hybrid search per sub-query — dispatched concurrently, since
+        # each sub-query hits Qdrant independently and has nothing to wait on
+        # from the others.
         # Scale prefetch per sub-query so total candidates stay ~prefetch_k
         prefetch_limit = self.prefetch_k // len(sub_queries)
-        candidate_lists = []
-        for sq in sub_queries:
-            candidate_lists.extend(
+        subquery_results = await asyncio.gather(
+            *[
                 self._search_subquery(
                     sq["query"], sq["expansion_terms"], prefetch_limit
                 )
-            )
+                for sq in sub_queries
+            ]
+        )
+        candidate_lists = [c for result in subquery_results for c in result]
 
         # Step 3: Merge + deduplicate across sub-queries
         candidates = self._merge_candidates(candidate_lists)
 
         # Step 4: Rerank merged candidates against the original query
-        chunks = self._rerank(query, candidates)
+        chunks = await self._rerank(query, candidates)
 
         # Step 5: MMR diversity selection
         chunks = self._mmr_selection(chunks)
