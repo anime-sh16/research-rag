@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -17,7 +17,9 @@ def mock_gemini_response() -> MagicMock:
 def chain(mock_gemini_response: MagicMock):
     """RAGChain with the Gemini client and LangSmith wrapper fully patched out."""
     mock_client = MagicMock()
-    mock_client.models.generate_content.return_value = mock_gemini_response
+    mock_client.aio.models.generate_content = AsyncMock(
+        return_value=mock_gemini_response
+    )
     with (
         patch("src.generation.chain.genai.Client", return_value=mock_client),
         patch("src.generation.chain.wrappers.wrap_gemini", return_value=mock_client),
@@ -119,96 +121,98 @@ class TestFormatContext:
 
 
 class TestGenerate:
-    def test_returns_model_text(
+    async def test_returns_model_text(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
-        result = chain.generate("What is attention?", sample_chunks)
+        result = await chain.generate("What is attention?", sample_chunks)
         assert result == "This is a generated answer."
 
-    def test_calls_generate_content_once(
+    async def test_calls_generate_content_once(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
-        chain.generate("What is attention?", sample_chunks)
-        chain._mock_client.models.generate_content.assert_called_once()
+        await chain.generate("What is attention?", sample_chunks)
+        chain._mock_client.aio.models.generate_content.assert_called_once()
 
-    def test_prompt_contains_question(
+    async def test_prompt_contains_question(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
         query = "What is attention?"
-        chain.generate(query, sample_chunks)
-        call_kwargs = chain._mock_client.models.generate_content.call_args
+        await chain.generate(query, sample_chunks)
+        call_kwargs = chain._mock_client.aio.models.generate_content.call_args
         prompt = call_kwargs.kwargs.get("contents") or call_kwargs.args[1]
         assert query in prompt
 
-    def test_prompt_contains_context(
+    async def test_prompt_contains_context(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
-        chain.generate("What is BERT?", sample_chunks)
-        call_kwargs = chain._mock_client.models.generate_content.call_args
+        await chain.generate("What is BERT?", sample_chunks)
+        call_kwargs = chain._mock_client.aio.models.generate_content.call_args
         prompt = call_kwargs.kwargs.get("contents") or call_kwargs.args[1]
         assert "self-attention" in prompt
         assert "masked language modelling" in prompt
 
-    def test_system_instruction_matches_default_prompt_variant(
+    async def test_system_instruction_matches_default_prompt_variant(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
         """System instruction sent to the model must match the configured prompt variant."""
-        chain.generate("Any question?", sample_chunks)
-        call_kwargs = chain._mock_client.models.generate_content.call_args
+        await chain.generate("Any question?", sample_chunks)
+        call_kwargs = chain._mock_client.aio.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert (
             config.system_instruction == PROMPT_VARIANTS[chain.prompt_version]["system"]
         )
 
-    def test_prompt_version_override_uses_v1_system_instruction(
+    async def test_prompt_version_override_uses_v1_system_instruction(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
         """Per-call prompt_version override must change which system instruction is sent."""
-        chain.generate("Any question?", sample_chunks, prompt_version="v1")
-        call_kwargs = chain._mock_client.models.generate_content.call_args
+        await chain.generate("Any question?", sample_chunks, prompt_version="v1")
+        call_kwargs = chain._mock_client.aio.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert config.system_instruction == PROMPT_VARIANTS["v1"]["system"]
 
-    def test_generate_raises_on_invalid_prompt_version_override(
+    async def test_generate_raises_on_invalid_prompt_version_override(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
         with pytest.raises(ValueError, match="Unknown prompt_version"):
-            chain.generate("query", sample_chunks, prompt_version="bad_version")
+            await chain.generate("query", sample_chunks, prompt_version="bad_version")
 
-    def test_thinking_config_level_is_low(
+    async def test_thinking_config_level_is_low(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
         """ThinkingConfig(thinking_level='low') must be forwarded — added in v2."""
-        chain.generate("Any question?", sample_chunks)
-        call_kwargs = chain._mock_client.models.generate_content.call_args
+        await chain.generate("Any question?", sample_chunks)
+        call_kwargs = chain._mock_client.aio.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert config.thinking_config is not None
         assert config.thinking_config.thinking_level.value == "LOW"
 
-    def test_temperature_matches_config_setting(
+    async def test_temperature_matches_config_setting(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
-        chain.generate("Any question?", sample_chunks)
-        call_kwargs = chain._mock_client.models.generate_content.call_args
+        await chain.generate("Any question?", sample_chunks)
+        call_kwargs = chain._mock_client.aio.models.generate_content.call_args
         config = call_kwargs.kwargs.get("config") or call_kwargs.args[2]
         assert config.temperature == pytest.approx(settings.generation.temperature)
 
-    def test_uses_correct_model(
+    async def test_uses_correct_model(
         self, chain: RAGChain, sample_chunks: list[dict]
     ) -> None:
-        chain.generate("Any question?", sample_chunks)
-        call_kwargs = chain._mock_client.models.generate_content.call_args
+        await chain.generate("Any question?", sample_chunks)
+        call_kwargs = chain._mock_client.aio.models.generate_content.call_args
         model = call_kwargs.kwargs.get("model") or call_kwargs.args[0]
         assert model == settings.generation.model
 
-    def test_generate_with_empty_chunks(self, chain: RAGChain) -> None:
+    async def test_generate_with_empty_chunks(self, chain: RAGChain) -> None:
         """Should not raise — empty context is valid, model decides what to do."""
-        result = chain.generate("What is LoRA?", [])
+        result = await chain.generate("What is LoRA?", [])
         assert isinstance(result, str)
 
-    def test_custom_model_is_used(self, mock_gemini_response: MagicMock) -> None:
+    async def test_custom_model_is_used(self, mock_gemini_response: MagicMock) -> None:
         mock_client = MagicMock()
-        mock_client.models.generate_content.return_value = mock_gemini_response
+        mock_client.aio.models.generate_content = AsyncMock(
+            return_value=mock_gemini_response
+        )
         with (
             patch("src.generation.chain.genai.Client", return_value=mock_client),
             patch(
@@ -217,7 +221,7 @@ class TestGenerate:
             patch("src.generation.chain.get_current_run_tree", return_value=None),
         ):
             custom_chain = RAGChain(model="gemini-2.5-pro")
-            custom_chain.generate("test", [])
-            call_kwargs = mock_client.models.generate_content.call_args
+            await custom_chain.generate("test", [])
+            call_kwargs = mock_client.aio.models.generate_content.call_args
             model = call_kwargs.kwargs.get("model") or call_kwargs.args[0]
             assert model == "gemini-2.5-pro"
