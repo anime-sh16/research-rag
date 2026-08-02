@@ -19,6 +19,7 @@ from tenacity import (
     retry_if_exception,
     stop_after_attempt,
     wait_exponential,
+    wait_exponential_jitter,
 )
 
 from src.config.config import settings
@@ -51,6 +52,55 @@ def _is_service_unavailable_error(exc: BaseException) -> bool:
     return isinstance(exc, genai_errors.ServerError) and (
         getattr(exc, "status_code", None) == 503 or "503" in str(exc)
     )
+
+
+def _is_http_rate_limit_error(exc: BaseException) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429
+
+
+def _is_http_service_unavailable_error(exc: BaseException) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 503
+
+
+def _is_http_timeout_error(exc: BaseException) -> bool:
+    return isinstance(exc, (TimeoutError, httpx.TimeoutException))
+
+
+# Composable retry decorator for the Jina rerank HTTP call. Jina's free tier caps
+# concurrent requests at 2 (not RPM/TPM) — a 429 here means "another in-flight
+# request needs to finish first", which clears in seconds, not minutes. Backoff is
+# deliberately much shorter than the Gemini quota-reset backoffs below.
+#
+# The rate-limit layer uses jittered backoff, not plain exponential: when N
+# concurrent requests all get 429'd at the same instant (exactly what happens when
+# more than 2 requests hit rerank simultaneously), plain exponential backoff makes
+# them all wait the same duration and retry in lockstep — colliding again. Jitter
+# spreads their retries out so they don't all re-collide on the same slot.
+_jina_retry = lambda fn: (  # noqa: E731
+    retry(
+        retry=retry_if_exception(_is_http_service_unavailable_error),
+        wait=wait_exponential(multiplier=5, min=5, max=30),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )(
+        retry(
+            retry=retry_if_exception(_is_http_rate_limit_error),
+            wait=wait_exponential_jitter(initial=1, max=10, jitter=2),
+            stop=stop_after_attempt(5),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )(
+            retry(
+                retry=retry_if_exception(_is_http_timeout_error),
+                wait=wait_exponential(multiplier=2, min=2, max=10),
+                stop=stop_after_attempt(3),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            )(fn)
+        )
+    )
+)
 
 
 # Composable retry decorator for all Gemini API calls
@@ -347,6 +397,7 @@ class Retriever:
     # Reranking
 
     @traceable(run_type="tool", name="retrieval/jina_rerank")
+    @_jina_retry
     async def _rerank(self, query: str, candidates: list[dict]) -> list[dict]:
         """Rerank candidates using Jina Reranker API, return top_k sorted by relevance."""
         if not candidates:
